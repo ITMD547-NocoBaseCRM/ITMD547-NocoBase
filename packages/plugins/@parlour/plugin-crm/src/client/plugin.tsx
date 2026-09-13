@@ -1,42 +1,10 @@
 import { Plugin } from '@nocobase/client';
-import * as sql from 'mssql';
 import models from './models';
 
 export class PluginCrmClient extends Plugin {
- async afterAdd() {}
-
-  async beforeLoad() {}
-
   async load() {
-    try {
-      const pool = await sql.connect({
-        server: process.env.AZURE_SQL_SERVER!,
-        database: process.env.AZURE_SQL_DATABASE!,
-        user: process.env.AZURE_SQL_USER!,
-        password: process.env.AZURE_SQL_PASSWORD!,
-        port: Number(process.env.AZURE_SQL_PORT || 1433),
-        options: {
-          encrypt: true,
-          trustServerCertificate: false,
-        },
-      });
-
-      const result = await pool.request().query('SELECT 1 AS connected');
-
-      console.log('Azure SQL connected:', result.recordset);
-    } catch (error) {
-      console.error('Azure SQL connection failed:', error);
-    }
+    this.flowEngine.registerModels(models);
   }
-
-  async install() {}
-
-  async afterEnable() {}
-
-  async afterDisable() {}
-
-  async remove() {}
-
 }
 
 export default PluginCrmClient;
