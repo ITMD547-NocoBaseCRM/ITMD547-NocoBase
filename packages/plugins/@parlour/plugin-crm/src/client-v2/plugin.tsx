@@ -4,7 +4,7 @@ export class PluginCrmClientV2 extends Plugin {
   async load() {
     this.router.add('crm-customers', {
       path: '/crm/customers',
-      componentLoader: () => import('./pages/CustomersPage.tsx'),
+      componentLoader: () => import('./pages/CustomersPage'),
     });
   }
 }
