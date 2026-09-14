@@ -35,9 +35,6 @@ jobs:
       - name: Build NocoBase
         run: yarn build
 
-      - name: Remove CI dependencies before packaging
-        run: rm -rf node_modules
-        
       - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
