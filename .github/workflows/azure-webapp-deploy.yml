@@ -35,12 +35,20 @@ jobs:
       - name: Build NocoBase
         run: yarn build
 
+      - name: Create deployment archive
+        run: |
+          tar \
+            --exclude='./.git' \
+            --exclude='./node-app.tar.gz' \
+            -czf node-app.tar.gz \
+            .
+
       - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: .
-          include-hidden-files: true
+          path: node-app.tar.gz
+          compression-level: 0
 
   deploy:
     runs-on: ubuntu-latest
@@ -55,6 +63,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
+
+      - name: Extract deployment archive
+        run: |
+          mkdir -p deploy-package
+          tar -xzf node-app.tar.gz -C deploy-package
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -89,4 +102,4 @@ jobs:
         with:
           app-name: 'Parlour'
           slot-name: 'Production'
-          package: .
+          package: deploy-package
