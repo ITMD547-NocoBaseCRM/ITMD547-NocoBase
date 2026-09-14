@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\tieso\\Downloads\\IIT\\ITMD547\\ITMD547-NocoBase\\nocobase-app\\storage\\logs\\main\\workflows\\timeout\\.1761adeb8ba736c474e6d110b759d792155391ab-audit.json",
+    "files": [
+        {
+            "date": 1789411591367,
+            "name": "C:\\Users\\tieso\\Downloads\\IIT\\ITMD547\\ITMD547-NocoBase\\nocobase-app\\storage\\logs\\main\\workflows\\timeout\\2026-09-14.log",
+            "hash": "9365caeca4beaadb3fcef97aea7baabdae4e114cb3e3c26e8e09999f60bea9aa"
+        }
+    ],
+    "hashType": "sha256"
+}
