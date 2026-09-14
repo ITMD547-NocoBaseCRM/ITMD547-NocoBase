@@ -1,0 +1,16 @@
+[31m2026-09-14 10:08:47 [error] Unable to connect to the database           [39m stack=Error: Unable to connect to the database
+    at _AsyncEmitter.auth (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\database\lib\database.js:675:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async _AsyncEmitter.authenticate (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\server\lib\application.js:506:5)
+    at async Object.callback (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\server\lib\application.js:836:9)
+    at async _AppCommand.parseAsync (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\server\node_modules\commander\lib\command.js:935:5)
+    at async _AsyncEmitter.runAsCLI (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\server\lib\application.js:593:23) module=application app=main reqId=4e9c20f1-4c8c-4d5c-be29-461797d72cce dataSourceKey=main
+[31m2026-09-14 10:08:47 [error] Access denied for user ''@'localhost' (using password: YES)[39m stack=SequelizeAccessDeniedError: Access denied for user ''@'localhost' (using password: YES)
+    at ConnectionManager.connect (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\dialects\mysql\connection-manager.js:118:17)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async ConnectionManager._connect (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\dialects\abstract\connection-manager.js:332:24)
+    at async <anonymous> (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\dialects\abstract\connection-manager.js:250:32)
+    at async ConnectionManager.getConnection (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\dialects\abstract\connection-manager.js:280:7)
+    at async <anonymous> (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\sequelize.js:638:26)
+    at async Sequelize.authenticate (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\sequelize\src\sequelize.js:972:5)
+    at async BackOff.authenticate [as request] (C:\Users\tieso\Downloads\IIT\ITMD547\Nocobase-ITMD547\nocobase-app\node_modules\@nocobase\database\lib\database.js:653:9) app=main reqId=4e9c20f1-4c8c-4d5c-be29-461797d72cce
