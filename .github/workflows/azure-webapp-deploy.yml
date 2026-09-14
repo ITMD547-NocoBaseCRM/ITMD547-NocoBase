@@ -94,6 +94,7 @@ jobs:
             --name Parlour \
             --resource-group "$resource_group" \
             --settings \
+              APP_PORT=8080 \
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false
 
