@@ -63,9 +63,8 @@ Clone the project:
 
 ```bash
 https://github.com/ITMD547-NocoBaseCRM/ITMD547-NocoBase
-cd parlour_chicago
 ```
-
+Enter the file:
 Switch to the development branch:
 
 ```bash
