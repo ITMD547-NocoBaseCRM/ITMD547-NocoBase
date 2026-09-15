@@ -62,7 +62,7 @@ npm install --global yarn@1.22.22
 Clone the project:
 
 ```bash
-git clone https://github.com/Pradeeppk7/parlour_chicago.git
+https://github.com/ITMD547-NocoBaseCRM/ITMD547-NocoBase
 cd parlour_chicago
 ```
 
