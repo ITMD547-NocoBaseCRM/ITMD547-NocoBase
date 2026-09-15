@@ -98,6 +98,31 @@ jobs:
               SCM_DO_BUILD_DURING_DEPLOYMENT=false \
               ENABLE_ORYX_BUILD=false
 
+      - name: Configure Azure App Service
+        shell: bash
+        run: |
+          resource_group="$(az resource list \
+            --name Parlour \
+            --resource-type Microsoft.Web/sites \
+            --query '[0].resourceGroup' \
+            --output tsv)"
+
+          echo "Resource group: $resource_group"
+
+          az webapp config appsettings set \
+            --name Parlour \
+            --resource-group "$resource_group" \
+            --settings \
+              APP_ENV=production \
+              APP_PORT=8080 \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              ENABLE_ORYX_BUILD=false
+
+          az webapp config set \
+            --name Parlour \
+            --resource-group "$resource_group" \
+            --startup-file "yarn start"
+
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
