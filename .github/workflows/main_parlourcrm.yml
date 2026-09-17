@@ -57,10 +57,14 @@ jobs:
       - name: Configure App Service startup
         shell: bash
         run: |
-          resource_group="$(az webapp show \
-            --name Parlourcrm \
-            --query resourceGroup \
+          resource_group="$(az webapp list \
+            --query "[?name=='Parlourcrm'].resourceGroup | [0]" \
             --output tsv)"
+
+          if [ -z "$resource_group" ]; then
+            echo "App Service 'Parlourcrm' was not found in the authenticated subscription." >&2
+            exit 1
+          fi
 
           az webapp config appsettings set \
             --name Parlourcrm \
