@@ -39,7 +39,8 @@
     "mariadb": "^2.5.6",
     "pg": "^8.14.1",
     "pg-hstore": "^2.3.4",
-    "@nocobase/app": "2.2.12"
+    "@nocobase/app": "2.2.12",
+    "@nocobase/plugin-license": "2.2.12"
   },
   "devDependencies": {
     "@nocobase/devtools": "2.2.12"
