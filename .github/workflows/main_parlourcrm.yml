@@ -54,6 +54,28 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_821B832AA001457889B2A8D465C28088 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_278F11CBB23A4E8DB6938812B2108E9A }}
 
+      - name: Configure App Service startup
+        shell: bash
+        run: |
+          resource_group="$(az webapp show \
+            --name Parlourcrm \
+            --query resourceGroup \
+            --output tsv)"
+
+          az webapp config appsettings set \
+            --name Parlourcrm \
+            --resource-group "$resource_group" \
+            --settings \
+              APP_ENV=production \
+              APP_PORT=8080 \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              ENABLE_ORYX_BUILD=false
+
+          az webapp config set \
+            --name Parlourcrm \
+            --resource-group "$resource_group" \
+            --startup-file "npm start"
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
