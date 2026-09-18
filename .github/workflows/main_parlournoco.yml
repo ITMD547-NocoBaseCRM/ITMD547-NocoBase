@@ -1,8 +1,8 @@
-# Azure deployment workflow (manual trigger commit)
+# Parlournoco Azure deployment trigger
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy Node.js app to Azure Web App - Parlourcrm
+name: Build and deploy Node.js app to Azure Web App - Parlournoco
 
 on:
   push:
@@ -51,24 +51,52 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_D465A10CE85C4867B34D8F791B435750 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_821B832AA001457889B2A8D465C28088 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_278F11CBB23A4E8DB6938812B2108E9A }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_49BACFE8E1A544F6A7C462A71F24BA56 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_D5E1880AC0784C3E8ED285C39E7DEFEE }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3C06E72F2E1A4D5BA110142419572D31 }}
+
+      - name: Ensure App Service is enabled
+        shell: bash
+        run: |
+          resource_group="$(az webapp list \
+            --query "[?name=='Parlournoco'].resourceGroup | [0]" \
+            --output tsv)"
+
+          if [ -z "$resource_group" ]; then
+            echo "App Service 'Parlournoco' was not found in the authenticated subscription." >&2
+            exit 1
+          fi
+
+          az webapp update \
+            --name Parlournoco \
+            --resource-group "$resource_group" \
+            --set enabled=true
+
+          enabled="$(az webapp show \
+            --name Parlournoco \
+            --resource-group "$resource_group" \
+            --query enabled \
+            --output tsv)"
+
+          if [ "$enabled" != "true" ]; then
+            echo "App Service remains disabled." >&2
+            exit 1
+          fi
 
       - name: Configure App Service startup
         shell: bash
         run: |
           resource_group="$(az webapp list \
-            --query "[?name=='Parlourcrm'].resourceGroup | [0]" \
+            --query "[?name=='Parlournoco'].resourceGroup | [0]" \
             --output tsv)"
 
           if [ -z "$resource_group" ]; then
-            echo "App Service 'Parlourcrm' was not found in the authenticated subscription." >&2
+            echo "App Service 'Parlournoco' was not found in the authenticated subscription." >&2
             exit 1
           fi
 
           az webapp config appsettings set \
-            --name Parlourcrm \
+            --name Parlournoco \
             --resource-group "$resource_group" \
             --settings \
               APP_ENV=production \
@@ -77,7 +105,7 @@ jobs:
               ENABLE_ORYX_BUILD=false
 
           az webapp config set \
-            --name Parlourcrm \
+            --name Parlournoco \
             --resource-group "$resource_group" \
             --startup-file "npm start"
 
@@ -85,7 +113,7 @@ jobs:
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'Parlourcrm'
+          app-name: 'Parlournoco'
           slot-name: 'Production'
           package: .
           
