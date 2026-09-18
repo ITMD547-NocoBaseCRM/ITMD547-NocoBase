@@ -102,6 +102,29 @@ jobs:
             --resource-group "$resource_group" \
             --startup-file "bash startup.sh"
 
+      - name: Remove stale Oryx build artifacts from wwwroot
+        shell: bash
+        run: |
+          # A prior deployment ran with ENABLE_ORYX_BUILD=true, which left an
+          # oryx-manifest.toml and node_modules.tar.gz in /home/site/wwwroot.
+          # /home persists across deployments, so the platform's startup wrapper
+          # keeps finding that manifest and re-extracting the stale tarball over
+          # the correctly-deployed node_modules on every restart. Deleting these
+          # (idempotent - fine if already gone) keeps that from recurring.
+          creds="$(az webapp deployment list-publishing-credentials \
+            --name itmd547-nocobase \
+            --resource-group "$resource_group" \
+            --query "[publishingUserName,publishingPassword]" \
+            --output tsv)"
+          user="$(echo "$creds" | cut -f1)"
+          pass="$(echo "$creds" | cut -f2)"
+          base="https://itmd547-nocobase.scm.azurewebsites.net/api/vfs/site/wwwroot"
+
+          for f in oryx-manifest.toml node_modules.tar.gz; do
+            status="$(curl -s -u "$user:$pass" -o /dev/null -w '%{http_code}' -X DELETE "$base/$f")"
+            echo "DELETE $f -> HTTP $status"
+          done
+
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
