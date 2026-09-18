@@ -66,10 +66,9 @@ npm install --global yarn@1.22.22
 Clone the project:
 
 ```bash
-git clone https://github.com/Pradeeppk7/parlour_chicago.git
-cd parlour_chicago
+https://github.com/ITMD547-NocoBaseCRM/ITMD547-NocoBase
 ```
-
+Enter the file:
 Switch to the development branch:
 
 ```bash
@@ -579,4 +578,3 @@ git checkout -b feature/your-feature-name
 ```
 
 Make changes, commit them, push the feature branch, and create a Pull Request into `develop`.
->>>>>>> c1df4258f9104826cf14733dc490bde28af795ea
