@@ -55,6 +55,34 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_D5E1880AC0784C3E8ED285C39E7DEFEE }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_3C06E72F2E1A4D5BA110142419572D31 }}
 
+      - name: Ensure App Service is enabled
+        shell: bash
+        run: |
+          resource_group="$(az webapp list \
+            --query "[?name=='Parlournoco'].resourceGroup | [0]" \
+            --output tsv)"
+
+          if [ -z "$resource_group" ]; then
+            echo "App Service 'Parlournoco' was not found in the authenticated subscription." >&2
+            exit 1
+          fi
+
+          az webapp update \
+            --name Parlournoco \
+            --resource-group "$resource_group" \
+            --set enabled=true
+
+          enabled="$(az webapp show \
+            --name Parlournoco \
+            --resource-group "$resource_group" \
+            --query enabled \
+            --output tsv)"
+
+          if [ "$enabled" != "true" ]; then
+            echo "App Service remains disabled." >&2
+            exit 1
+          fi
+
       - name: Configure App Service startup
         shell: bash
         run: |
