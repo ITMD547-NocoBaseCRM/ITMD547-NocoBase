@@ -29,6 +29,9 @@ jobs:
           npm install
           npm run build --if-present
 
+      - name: Prepare npm deployment artifact
+        run: rm -f yarn.lock
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
