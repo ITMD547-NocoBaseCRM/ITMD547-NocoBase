@@ -83,6 +83,10 @@ jobs:
             exit 1
           fi
 
+          az webapp start \
+            --name Parlournoco \
+            --resource-group "$resource_group"
+
       - name: Configure App Service startup
         shell: bash
         run: |
