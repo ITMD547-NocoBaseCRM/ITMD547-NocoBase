@@ -104,6 +104,8 @@ jobs:
 
       - name: Remove stale Oryx build artifacts from wwwroot
         shell: bash
+        # Best-effort: this cleanup must never block the real deployment below.
+        continue-on-error: true
         run: |
           # A prior deployment ran with ENABLE_ORYX_BUILD=true, which left an
           # oryx-manifest.toml and node_modules.tar.gz in /home/site/wwwroot.
@@ -111,18 +113,36 @@ jobs:
           # keeps finding that manifest and re-extracting the stale tarball over
           # the correctly-deployed node_modules on every restart. Deleting these
           # (idempotent - fine if already gone) keeps that from recurring.
+          set +e
+
           creds="$(az webapp deployment list-publishing-credentials \
             --name itmd547-nocobase \
             --resource-group "$resource_group" \
             --query "[publishingUserName,publishingPassword]" \
             --output tsv)"
-          user="$(echo "$creds" | cut -f1)"
-          pass="$(echo "$creds" | cut -f2)"
-          base="https://itmd547-nocobase.scm.azurewebsites.net/api/vfs/site/wwwroot"
+          az_status=$?
+          user="$(printf '%s' "$creds" | cut -f1)"
+          pass="$(printf '%s' "$creds" | cut -f2)"
+          echo "::add-mask::$pass"
+
+          echo "az publishing-credentials exit status: $az_status"
+          echo "publishing user: ${user:-<empty>}"
+
+          if [ "$az_status" -ne 0 ] || [ -z "$user" ] || [ -z "$pass" ]; then
+            echo "::warning::Could not retrieve publishing credentials; skipping stale-artifact cleanup this run."
+            exit 0
+          fi
+
+          host="itmd547-nocobase.scm.azurewebsites.net"
+          base="https://$host/api/vfs/site/wwwroot"
+
+          echo "Resolving $host ..."
+          getent hosts "$host" || echo "DNS lookup for $host did not return a result."
 
           for f in oryx-manifest.toml node_modules.tar.gz; do
-            status="$(curl -s -u "$user:$pass" -o /dev/null -w '%{http_code}' -X DELETE "$base/$f")"
-            echo "DELETE $f -> HTTP $status"
+            echo "Deleting $f ..."
+            curl -sS -u "$user:$pass" -o /dev/null -w 'HTTP %{http_code}\n' -X DELETE "$base/$f"
+            echo "curl exit code for $f: $?"
           done
 
       - name: 'Deploy to Azure Web App'
