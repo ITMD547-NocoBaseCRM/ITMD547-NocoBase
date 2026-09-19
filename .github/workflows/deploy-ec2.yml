@@ -32,6 +32,13 @@ jobs:
             git clean -f -- Dockerfile docker-compose.ec2.yml
             git pull --ff-only origin main
             sudo docker compose -f docker-compose.ec2.yml up -d --build
-            sleep 15
             test "$(sudo docker inspect -f '{{.State.Status}}' app-nocobase-1)" = "running"
-            curl --fail --silent --show-error --max-time 15 http://127.0.0.1:13000/ >/dev/null
+            for attempt in $(seq 1 18); do
+              if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:13000/ >/dev/null; then
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "NocoBase did not become ready in 90 seconds"
+            sudo docker compose -f docker-compose.ec2.yml logs --tail=100 nocobase
+            exit 1
