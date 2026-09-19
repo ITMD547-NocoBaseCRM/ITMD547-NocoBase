@@ -1,0 +1,14 @@
+services:
+  nocobase:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "13000:13000"
+    volumes:
+      - nocobase-storage:/app/storage
+
+volumes:
+  nocobase-storage:
