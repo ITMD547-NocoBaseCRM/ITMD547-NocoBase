@@ -1,8 +1,0 @@
-2026-09-14 11:26:19 [info]  app is stopping, draining local queues...    
-2026-09-14 11:26:19 [info]  local queues drained                         
-2026-09-14 11:26:35 [info]  (starting) check for queueing executions     
-2026-09-14 11:27:59 [info]  (starting) check for queueing executions     
-2026-09-14 13:46:38 [error] workflow queue recovery failed               error={"name":"SequelizeHostNotFoundError","parent":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"},"original":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"}}
-2026-09-14 15:41:47 [error] workflow queue recovery failed               error={"name":"SequelizeHostNotFoundError","parent":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"},"original":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"}}
-2026-09-14 16:01:36 [error] workflow queue recovery failed               error={"name":"SequelizeHostNotFoundError","parent":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"},"original":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"}}
-[32m2026-09-14 16:41:30 [info]  (starting) check for queueing executions    [39m 

@@ -20,3 +20,5 @@ docs-dist/
 dist/
 /docker/**/storage
 /storage/.app-dev
+storage/logs/
+storage/.pm2/

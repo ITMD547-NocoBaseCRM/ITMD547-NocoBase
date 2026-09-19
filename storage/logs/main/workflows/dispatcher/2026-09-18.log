@@ -1,6 +1,0 @@
-[32m2026-09-18 13:22:11 [info]  (starting) check for queueing executions    [39m 
-[32m2026-09-18 14:10:23 [info]  app is stopping, draining local queues...   [39m 
-2026-09-18 14:58:42 [info]  (starting) check for queueing executions     
-2026-09-18 15:17:02 [error] workflow queue recovery failed               error={"name":"SequelizeHostNotFoundError","parent":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"},"original":{"errno":-3008,"code":"ENOTFOUND","syscall":"getaddrinfo","hostname":"ep-quiet-star-axig7pqs-pooler.c-4.us-east-2.aws.neon.tech"}}
-2026-09-18 15:22:12 [error] workflow queue recovery failed               error={"name":"SequelizeConnectionError","parent":{"code":"ETIMEDOUT"},"original":{"code":"ETIMEDOUT"}}
-2026-09-18 15:30:58 [info]  (starting) check for queueing executions     
