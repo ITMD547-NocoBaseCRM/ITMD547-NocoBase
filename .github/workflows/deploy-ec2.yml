@@ -29,6 +29,7 @@ jobs:
           script: |
             set -e
             cd /opt/parlour-crm/app
+            git clean -f -- Dockerfile docker-compose.ec2.yml
             git pull --ff-only origin main
             sudo docker compose -f docker-compose.ec2.yml up -d --build
             sleep 15
