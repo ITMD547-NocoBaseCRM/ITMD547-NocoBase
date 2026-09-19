@@ -47,7 +47,7 @@ setCustomers(Array.isArray(data) ? data : []);
       dataIndex: 'Phone',
     },
     {
-      title: 'Email ID',
+      title: 'Email',
       dataIndex: 'Email',
     },
   ];
