@@ -20,4 +20,4 @@ echo "Running NocoBase install (idempotent, safe to re-run on an already-install
 yarn nocobase install
 
 echo "Starting NocoBase..."
-yarn dev
+yarn start
