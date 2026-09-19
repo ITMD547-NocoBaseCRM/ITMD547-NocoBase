@@ -8,7 +8,7 @@ COPY package.json yarn.lock lerna.json .yarnrc .env.e2e.example ./
 COPY tsconfig.json tsconfig.paths.json tsconfig.server.json ./
 COPY packages ./packages
 
-RUN yarn install --frozen-lockfile --production=false --cache-folder /tmp/yarn-cache \
+RUN yarn install --frozen-lockfile --production=false --link-duplicates --cache-folder /tmp/yarn-cache \
     && yarn build \
     && rm -rf /tmp/yarn-cache
 
