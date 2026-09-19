@@ -31,6 +31,8 @@ jobs:
             cd /opt/parlour-crm/app
             git clean -f -- Dockerfile docker-compose.ec2.yml
             git pull --ff-only origin main
+            sudo docker builder prune -af
+            sudo docker system prune -af
             sudo docker compose -f docker-compose.ec2.yml up -d --build
             test "$(sudo docker inspect -f '{{.State.Status}}' app-nocobase-1)" = "running"
             for attempt in $(seq 1 18); do
