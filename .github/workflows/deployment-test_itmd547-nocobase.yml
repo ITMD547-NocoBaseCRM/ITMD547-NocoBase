@@ -28,10 +28,11 @@ jobs:
       - name: Set Yarn network timeout
         run: yarn config set network-timeout 600000
 
-      - name: yarn install and build
+      - name: npm install and build
         run: |
-          yarn install --frozen-lockfile
-          yarn build
+          npm install
+          npm nocobase install 
+          npm build
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -58,49 +59,6 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_EF2046D84A8841A88A78010167B97B08 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_F9079CCA2E034ED5AFC80E9837183CBF }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_CA05E8A9AEB7485FB012B61CD97B3A4A }}
-      - name: Configure App Service startup
-        shell: bash
-        run: |
-          resource_group="$(az webapp list \
-            --query "[?name=='itmd547-nocobase'].resourceGroup | [0]" \
-            --output tsv)"
-
-          if [ -z "$resource_group" ]; then
-            echo "App Service 'itmd547-nocobase' was not found in the authenticated subscription." >&2
-            exit 1
-          fi
-
-          echo "resource_group=$resource_group" >> "$GITHUB_ENV"
-
-          az webapp config appsettings set \
-            --name itmd547-nocobase \
-            --resource-group "$resource_group" \
-            --settings \
-              APP_ENV=production \
-              APP_PORT=8080 \
-              WEBSITES_PORT=8080 \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              ENABLE_ORYX_BUILD=false \
-              API_BASE_PATH=/api/ \
-              DB_LOGGING=off \
-              DB_DIALECT=postgres \
-              DB_PORT=5432 \
-              DB_DIALECT_OPTIONS_SSL_MODE=require \
-              DB_DIALECT_OPTIONS_SSL_REJECT_UNAUTHORIZED=false \
-              INIT_ROOT_EMAIL=admin@nocobase.com \
-              INIT_ROOT_NICKNAME="Super Admin" \
-              INIT_ROOT_USERNAME=nocobase \
-              APP_KEY="$APP_KEY" \
-              DB_HOST="$DB_HOST" \
-              DB_DATABASE="$DB_DATABASE" \
-              DB_USER="$DB_USER" \
-              DB_PASSWORD="$DB_PASSWORD" \
-              INIT_ROOT_PASSWORD="$INIT_ROOT_PASSWORD"
-
-          az webapp config set \
-            --name itmd547-nocobase \
-            --resource-group "$resource_group" \
-            --startup-file "bash startup.sh"
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
