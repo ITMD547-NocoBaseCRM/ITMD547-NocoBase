@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+# ITMD547-NocoBase
+Small-Business CRM with NocoBase
+=======
 # Parlour CRM
 
 Parlour CRM is a CRM application built with **NocoBase 2** and a custom NocoBase plugin.

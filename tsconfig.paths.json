@@ -6,18 +6,6 @@
       ],
       "@@/*": [
         ".dumi/tmp/*"
-      ],
-      "@parlour/plugin-crm/client": [
-        "packages/plugins/@parlour/plugin-crm/src/client"
-      ],
-      "@parlour/plugin-crm/client-v2": [
-        "packages/plugins/@parlour/plugin-crm/src/client-v2"
-      ],
-      "@parlour/plugin-crm/package.json": [
-        "packages/plugins/@parlour/plugin-crm/package.json"
-      ],
-      "@parlour/plugin-crm": [
-        "packages/plugins/@parlour/plugin-crm/src"
       ]
     }
   }
