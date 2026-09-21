@@ -20,13 +20,5 @@ docs-dist/
 dist/
 /docker/**/storage
 /storage/.app-dev
-
-# Local configuration and runtime data
-.env.*
-!.env.example
-/storage/apps/
-/storage/logs/
-/storage/db/*
-!/storage/db/.gitkeep
-/storage/uploads/*
-!/storage/uploads/.gitkeep
+storage/logs/
+storage/.pm2/
