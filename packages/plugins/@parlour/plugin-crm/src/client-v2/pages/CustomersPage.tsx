@@ -43,11 +43,11 @@ setCustomers(Array.isArray(data) ? data : []);
       dataIndex: 'LastName',
     },
     {
-      title: 'Mobile Phone',
+      title: 'Phone',
       dataIndex: 'Phone',
     },
     {
-      title: 'Email ID',
+      title: 'Email',
       dataIndex: 'Email',
     },
   ];

@@ -29,6 +29,9 @@ jobs:
           npm install
           npm run build --if-present
 
+      - name: Prepare npm deployment artifact
+        run: rm -f yarn.lock
+
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
@@ -83,6 +86,10 @@ jobs:
             exit 1
           fi
 
+          az webapp start \
+            --name Parlournoco \
+            --resource-group "$resource_group"
+
       - name: Configure App Service startup
         shell: bash
         run: |
@@ -101,8 +108,8 @@ jobs:
             --settings \
               APP_ENV=production \
               APP_PORT=8080 \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              ENABLE_ORYX_BUILD=false
+              SCM_DO_BUILD_DURING_DEPLOYMENT=true \
+              ENABLE_ORYX_BUILD=true
 
           az webapp config set \
             --name Parlournoco \
