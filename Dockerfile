@@ -4,7 +4,7 @@ WORKDIR /app
 
 ENV NODE_OPTIONS=--max-old-space-size=1536
 
-COPY package.json yarn.lock lerna.json .yarnrc .env.e2e.example ./
+COPY package.json yarn.lock lerna.json .env.e2e.example ./
 COPY tsconfig.json tsconfig.paths.json tsconfig.server.json ./
 COPY packages ./packages
 
