@@ -1,6 +1,6 @@
 # ITMD547 NocoBase CRM
 
-NocoBase 2 application deployed to AWS EC2 with Docker. PostgreSQL stores NocoBase data; Azure SQL stores CRM data.
+## NocoBase 2 application deployed to AWS EC2 with Docker. PostgreSQL stores NocoBase data; Azure SQL stores CRM data.
 
 ## Project structure
 
