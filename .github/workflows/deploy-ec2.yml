@@ -1,0 +1,47 @@
+name: Deploy NocoBase to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ec2-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare SSH key
+        env:
+          EC2_SSH_KEY_B64: ${{ secrets.EC2_SSH_KEY_B64 }}
+        run: |
+          echo "$EC2_SSH_KEY_B64" | base64 --decode > "$RUNNER_TEMP/ec2_key.pem"
+          chmod 600 "$RUNNER_TEMP/ec2_key.pem"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key_path: ${{ runner.temp }}/ec2_key.pem
+          command_timeout: 20m
+          script: |
+            set -e
+            cd /opt/parlour-crm/app
+            git clean -f -- Dockerfile docker-compose.ec2.yml
+            git pull --ff-only origin main
+            sudo docker builder prune -af
+            sudo docker system prune -af
+            sudo docker compose -f docker-compose.ec2.yml up -d --build
+            test "$(sudo docker inspect -f '{{.State.Status}}' app-nocobase-1)" = "running"
+            for attempt in $(seq 1 18); do
+              if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:13000/ >/dev/null; then
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "NocoBase did not become ready in 90 seconds"
+            sudo docker compose -f docker-compose.ec2.yml logs --tail=100 nocobase
+            exit 1
