@@ -19,6 +19,7 @@
     "test": "nocobase-v1 test",
     "e2e": "nocobase-v1 e2e",
     "tar": "nocobase-v1 tar",
+    "migrate:customer-profile": "node scripts/run-customer-profile-migration.js",
     "postinstall": "nocobase-v1 postinstall",
     "lint": "eslint ."
   },
