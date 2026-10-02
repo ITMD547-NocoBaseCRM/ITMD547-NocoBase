@@ -32,6 +32,8 @@
     "migrate:customer-profile-performance": "node scripts/run-customer-profile-performance-migration.js",
     "validate:customer-profile-performance": "node scripts/validate-customer-profile-performance.js",
     "measure:customer-profile-performance": "node scripts/measure-customer-profile-performance.js",
+    "migrate:customer-profile-mobile": "node scripts/run-customer-profile-mobile-migration.js",
+    "validate:customer-profile-mobile": "node scripts/validate-customer-profile-mobile.js",
     "postinstall": "nocobase-v1 postinstall",
     "lint": "eslint ."
   },
