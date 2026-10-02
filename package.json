@@ -25,6 +25,8 @@
     "validate:customer-profile-ui": "node scripts/validate-customer-profile-ui.js",
     "migrate:appointment-history-placeholder": "node scripts/run-appointment-history-placeholder-migration.js",
     "validate:appointment-history-placeholder": "node scripts/validate-appointment-history-placeholder.js",
+    "seed:us01-customer-profile": "node scripts/seed-us01-customer-profile.js",
+    "validate:us01-customer-profile-seed": "node scripts/validate-us01-seed.js",
     "test:customer-profile": "node --test scripts/customer-profile-state.test.js",
     "verify:customer-profile-rendering": "node scripts/verify-customer-profile-rendering.js",
     "postinstall": "nocobase-v1 postinstall",
