@@ -29,6 +29,9 @@
     "validate:us01-customer-profile-seed": "node scripts/validate-us01-seed.js",
     "test:customer-profile": "node --test scripts/customer-profile-state.test.js",
     "verify:customer-profile-rendering": "node scripts/verify-customer-profile-rendering.js",
+    "migrate:customer-profile-performance": "node scripts/run-customer-profile-performance-migration.js",
+    "validate:customer-profile-performance": "node scripts/validate-customer-profile-performance.js",
+    "measure:customer-profile-performance": "node scripts/measure-customer-profile-performance.js",
     "postinstall": "nocobase-v1 postinstall",
     "lint": "eslint ."
   },
