@@ -23,6 +23,8 @@
     "migrate:customer-profile-relationships": "node scripts/run-customer-profile-relationships-migration.js",
     "migrate:customer-profile-ui": "node scripts/run-customer-profile-ui-migration.js",
     "validate:customer-profile-ui": "node scripts/validate-customer-profile-ui.js",
+    "migrate:appointment-history-placeholder": "node scripts/run-appointment-history-placeholder-migration.js",
+    "validate:appointment-history-placeholder": "node scripts/validate-appointment-history-placeholder.js",
     "postinstall": "nocobase-v1 postinstall",
     "lint": "eslint ."
   },
