@@ -1,5 +1,6 @@
 const NOT_PROVIDED = 'Not provided';
 const NO_SENSITIVITIES = 'No sensitivities recorded';
+const NO_SERVICE_HISTORY = 'No service history recorded';
 
 function isBlank(value) {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
@@ -20,8 +21,17 @@ function safeList(value) {
   return value.map((item) => safeText(item, '')).filter(Boolean);
 }
 
+function unwrapApiRecord(payload) {
+  let value = payload;
+  for (let depth = 0; depth < 2; depth += 1) {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !value.data || typeof value.data !== 'object' || Array.isArray(value.data)) break;
+    value = value.data;
+  }
+  return value;
+}
+
 function normalizeCustomer(payload) {
-  const record = payload?.data ?? payload;
+  const record = unwrapApiRecord(payload);
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
   const firstName = safeText(record.firstName, '');
   const lastName = safeText(record.lastName, '');
@@ -66,27 +76,66 @@ function getIncompleteFields(customer) {
   return incomplete;
 }
 
+function getProfileFieldStates(customer) {
+  if (!customer) return {};
+  const fieldStates = {};
+  const add = (field, value, message) => {
+    fieldStates[field] = { status: value ? 'complete' : 'incomplete', message: value ? null : message };
+  };
+  add('phone', customer.phone !== NOT_PROVIDED, 'Phone not provided');
+  add('email', customer.email !== NOT_PROVIDED, 'Email not provided');
+  add('skinProfile', customer.skinProfile !== NOT_PROVIDED, 'Skin profile not provided');
+  add('preferences', customer.preferences !== NOT_PROVIDED, 'Preferences not provided');
+  add('notes', customer.notes !== NOT_PROVIDED, 'Notes not provided');
+  fieldStates.skinSensitivities = customer.skinSensitivities.length
+    ? { status: 'complete', message: null }
+    : { status: 'incomplete', message: NO_SENSITIVITIES };
+  return fieldStates;
+}
+
 function getProfileState({ customer, serviceHistory, loading = false, customerError = null, serviceHistoryError = null } = {}) {
-  if (loading) return { status: 'loading', customer: null, serviceHistory: [], incompleteFields: [], error: null };
-  if (customerError) return { status: customerError.code === 'NOT_FOUND' ? 'not-found' : 'error', customer: null, serviceHistory: [], incompleteFields: [], error: 'Unable to load this customer profile. Please retry.' };
+  if (loading) return { status: 'loading', customer: null, serviceHistory: [], incompleteFields: [], fieldStates: {}, error: null, canRetry: false, backToCustomers: false };
+  if (customerError) {
+    const notFound = customerError.code === 'NOT_FOUND';
+    return {
+      status: notFound ? 'not-found' : 'error',
+      customer: null,
+      serviceHistory: [],
+      incompleteFields: [],
+      fieldStates: {},
+      error: notFound ? 'Customer not found.' : 'Unable to load this customer profile. Please retry.',
+      canRetry: !notFound,
+      backToCustomers: true,
+    };
+  }
   const normalizedCustomer = normalizeCustomer(customer);
-  if (!normalizedCustomer?.id) return { status: 'not-found', customer: null, serviceHistory: [], incompleteFields: [], error: null };
+  if (!normalizedCustomer?.id) return { status: 'not-found', customer: null, serviceHistory: [], incompleteFields: [], fieldStates: {}, error: 'Customer not found.', canRetry: false, backToCustomers: true };
+  const historyMalformed = serviceHistory !== undefined && !Array.isArray(serviceHistory);
+  const historyError = serviceHistoryError || (historyMalformed ? { code: 'MALFORMED_RESPONSE' } : null);
   return {
     status: 'ready',
     customer: normalizedCustomer,
-    serviceHistory: normalizeServiceHistory(serviceHistory),
+    serviceHistory: historyError ? [] : normalizeServiceHistory(serviceHistory),
     incompleteFields: getIncompleteFields(normalizedCustomer),
-    serviceHistoryError: serviceHistoryError ? 'Service history could not be loaded. Please retry.' : null,
+    fieldStates: getProfileFieldStates(normalizedCustomer),
+    serviceHistoryError: historyError ? 'Service history could not be loaded. Please retry.' : null,
+    serviceHistoryEmptyText: historyError ? null : NO_SERVICE_HISTORY,
+    serviceHistoryCanRetry: Boolean(historyError),
     sensitivitiesEmptyText: normalizedCustomer.skinSensitivities.length ? null : NO_SENSITIVITIES,
+    canRetry: false,
+    backToCustomers: true,
   };
 }
 
 module.exports = {
   NOT_PROVIDED,
   NO_SENSITIVITIES,
+  NO_SERVICE_HISTORY,
   getIncompleteFields,
+  getProfileFieldStates,
   getProfileState,
   normalizeCustomer,
   normalizeServiceHistory,
+  unwrapApiRecord,
   safeText,
 };

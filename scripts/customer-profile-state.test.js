@@ -2,7 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   NO_SENSITIVITIES,
+  NO_SERVICE_HISTORY,
   NOT_PROVIDED,
+  getProfileFieldStates,
   getProfileState,
   normalizeCustomer,
   normalizeServiceHistory,
@@ -28,6 +30,8 @@ test('keeps minimal profiles usable and marks optional gaps', () => {
   assert.equal(state.customer.phone, NOT_PROVIDED);
   assert.ok(state.incompleteFields.includes('email'));
   assert.equal(state.sensitivitiesEmptyText, NO_SENSITIVITIES);
+  assert.equal(state.serviceHistoryEmptyText, NO_SERVICE_HISTORY);
+  assert.equal(state.fieldStates.phone.status, 'incomplete');
 });
 
 for (const skinProfile of ['normal', 'dry', 'oily', 'combination', 'sensitive', 'other']) {
@@ -61,7 +65,17 @@ test('normalizes large service histories and missing service fields', () => {
 
 test('returns clean loading, not-found, API error, and service-history error states', () => {
   assert.equal(getProfileState({ loading: true }).status, 'loading');
-  assert.equal(getProfileState({ customerError: { code: 'NOT_FOUND' } }).status, 'not-found');
+  assert.equal(getProfileState({ customerError: { code: 'NOT_FOUND' } }).error, 'Customer not found.');
   assert.equal(getProfileState({ customerError: new Error('database details') }).error, 'Unable to load this customer profile. Please retry.');
-  assert.equal(getProfileState({ customer: completeCustomer, serviceHistoryError: new Error('secret') }).serviceHistoryError, 'Service history could not be loaded. Please retry.');
+  assert.equal(getProfileState({ customer: completeCustomer, serviceHistoryError: new Error('secret') }).serviceHistoryCanRetry, true);
+  assert.equal(getProfileState({ customer: completeCustomer, serviceHistory: { malformed: true } }).serviceHistoryError, 'Service history could not be loaded. Please retry.');
+});
+
+test('returns subtle field validation state without leaking raw values', () => {
+  const states = getProfileFieldStates(normalizeCustomer({ id: 'c', phone: '', email: 'a@example.test', skinSensitivities: [] }));
+  assert.equal(states.phone.message, 'Phone not provided');
+  assert.equal(states.email.status, 'complete');
+  assert.equal(states.skinSensitivities.message, NO_SENSITIVITIES);
+  assert.equal(JSON.stringify(states).includes('undefined'), false);
+  assert.equal(JSON.stringify(states).includes('[object Object]'), false);
 });
