@@ -1,8 +1,16 @@
 
-const CFG = {"collection":"appointments","table":"yldxyya1moi","noun":"Appointments","search":{"fields":["customer.firstName","customer.lastName","staff.firstName","notes"],"placeholder":"Search customer, staff or notes"},"selects":[{"field":"category","placeholder":"All categories"},{"field":"status","placeholder":"All statuses"},{"field":"staffId","placeholder":"All staff","rel":{"collection":"staff","label":["firstName","lastName"]}}],"dateRange":{"field":"appointmentDate","label":"Date","dateOnly":true},"kpis":[{"label":"Scheduled","select":"status","value":"scheduled","color":"#2563eb"},{"label":"Confirmed","select":"status","value":"confirmed","color":"#0891b2"},{"label":"Completed","select":"status","value":"completed","color":"#16a34a"},{"label":"Cancelled","select":"status","value":"cancelled","color":"#dc2626"},{"label":"No show","select":"status","value":"noShow","color":"#ea580c"}],"columns":[{"key":"customer.firstName","label":"Customer","rel":{"collection":"customers","label":["firstName","lastName"]}},{"key":"staff.firstName","label":"Staff","rel":{"collection":"staff","label":["firstName","lastName"]}},{"key":"category","label":"Category"},{"key":"appointmentDate","label":"Date"},{"key":"startTime","label":"Start time"},{"key":"endTime","label":"End time"},{"key":"status","label":"Status"},{"key":"notes","label":"Notes"}]};
+const CFG = {"collection":"appointments","table":"yldxyya1moi","noun":"Appointments","search":{"fields":["customer.firstName","customer.lastName","staff.firstName","notes"],"placeholder":"Search customer, staff or notes"},"selects":[{"field":"status","placeholder":"All statuses"},{"field":"staffId","placeholder":"All staff","rel":{"collection":"staff","label":["firstName","lastName"]}}],"dateRange":{"field":"appointmentDate","label":"Date","dateOnly":true},"kpis":[{"label":"Scheduled","select":"status","value":"scheduled","color":"#2563eb"},{"label":"Confirmed","select":"status","value":"confirmed","color":"#0891b2"},{"label":"Completed","select":"status","value":"completed","color":"#16a34a"},{"label":"Cancelled","select":"status","value":"cancelled","color":"#dc2626"},{"label":"No show","select":"status","value":"noShow","color":"#ea580c"}],"columns":[{"key":"customer.firstName","label":"Customer","rel":{"collection":"customers","label":["firstName","lastName"]}},{"key":"staff.firstName","label":"Staff","rel":{"collection":"staff","label":["firstName","lastName"]}},{"key":"category","label":"Category"},{"key":"appointmentDate","label":"Date"},{"key":"startTime","label":"Start time"},{"key":"endTime","label":"End time"},{"key":"status","label":"Status"},{"key":"notes","label":"Notes"}]};
+// Type tabs (All / Sessions / Events). The list is injected from scripts/appointments-schema.js
+// (CATEGORY_TABS) when the page blueprint is built; each tab carries its server-side filter, so the
+// category values are never restated here. An empty list degrades to a single "All" tab.
+const TABS = /*APPOINTMENT_TABS*/[];
+const TAB_LIST = TABS.length ? TABS : [{ key: 'all', label: 'All', filter: {} }];
+const DEFAULT_TAB = TAB_LIST[0].key;
+const TAB_PARAM = 'tab';
+const tabByKey = (key) => TAB_LIST.find((t) => t.key === key) || TAB_LIST[0];
 const React = ctx.React; const antd = ctx.antd; const dayjs = ctx.dayjs;
 const { useState, useEffect, useRef, useMemo } = React;
-const { Input, Select, DatePicker, Button, Space, Upload, message, Tooltip } = antd;
+const { Input, Select, DatePicker, Button, Space, Upload, message, Tooltip, Tabs } = antd;
 const h = React.createElement;
 const GROUP = 'toolbar-' + CFG.table;
 const clean = (s) => String(s ?? '').replace(/^\{\{\s*t\(\s*["'](.*)["']\s*\)\s*\}\}$/, '$1');
@@ -18,16 +26,48 @@ const getTable = () => {
   const siblings = (ctx.model && ctx.model.parent && ctx.model.parent.subModels && ctx.model.parent.subModels.items) || [];
   return siblings.find(isAppointmentsTable) || (CFG.table ? ctx.engine.getModel(CFG.table) : null);
 };
+// The table may not exist yet when the toolbar first renders (sibling blocks mount independently).
+const whenTableReady = async () => {
+  for (let i = 0; i < 50; i++) {
+    const t = getTable();
+    if (t && t.resource && !t.resource.loading) return t;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return getTable();
+};
 const req = async (url, params) => (await ctx.api.request({ url, params })).data;
 const getPath = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
 
-function buildFilter(st, skipSelect) {
+// The selected tab lives in the URL (?tab=events) so a filtered view can be bookmarked or shared.
+// It is written with replace so switching tabs does not fill the browser history.
+// (RunJS rejects some browser globals, so the query string is handled as plain text.)
+const parseQuery = (search) => String(search || '').replace(/^\?/, '').split('&').filter(Boolean).map((pair) => { const i = pair.indexOf('='); return i < 0 ? [pair, ''] : [pair.slice(0, i), pair.slice(i + 1)]; });
+const readTabFromUrl = () => {
+  try {
+    const hit = parseQuery(window.location.search).find((pair) => pair[0] === TAB_PARAM);
+    return tabByKey(hit ? decodeURIComponent(hit[1]) : null).key;
+  } catch (e) { return DEFAULT_TAB; }
+};
+const writeTabToUrl = (key) => {
+  try {
+    const pairs = parseQuery(window.location.search).filter((pair) => pair[0] !== TAB_PARAM);
+    if (key !== DEFAULT_TAB) pairs.push([TAB_PARAM, encodeURIComponent(key)]);
+    const search = pairs.map((pair) => pair[0] + '=' + pair[1]).join('&');
+    const url = window.location.pathname + (search ? '?' + search : '') + window.location.hash;
+    if (ctx.router && typeof ctx.router.navigate === 'function') ctx.router.navigate(url, { replace: true });
+    else window.history.replaceState(window.history.state, '', url);
+  } catch (e) { /* the URL is a convenience; the tab works without it */ }
+};
+
+// Every list request goes through the server, so the authenticated user's ACL scope is always applied
+// together with these filters. Rows are never fetched just to be filtered here.
+function buildFilter(st, opts = {}) {
   const and = [];
   const q = (st.q || '').trim();
   if (q && CFG.search) and.push({ $or: CFG.search.fields.map((f) => ({ [f]: { $includes: q } })) });
   (CFG.selects || []).forEach((s) => {
     const v = st.sel[s.field];
-    if (skipSelect && skipSelect === s.field) return;
+    if (opts.skipSelect && opts.skipSelect === s.field) return;
     if (v !== undefined && v !== null && v !== '') and.push({ [s.field]: { $eq: v } });
   });
   if (CFG.dateRange && st.range && st.range[0] && st.range[1]) {
@@ -35,9 +75,14 @@ function buildFilter(st, skipSelect) {
     if (CFG.dateRange.dateOnly) and.push({ [f]: { $gte: st.range[0].format('YYYY-MM-DD') } }, { [f]: { $lte: st.range[1].format('YYYY-MM-DD') } });
     else and.push({ [f]: { $gte: st.range[0].startOf('day').toISOString() } }, { [f]: { $lte: st.range[1].endOf('day').toISOString() } });
   }
+  if (!opts.skipTab) {
+    const tabFilter = tabByKey(st.tab).filter;
+    if (tabFilter && Object.keys(tabFilter).length) and.push(tabFilter);
+  }
   return and.length ? { $and: and } : {};
 }
 const merge = (a, b) => { const x = [a, b].filter((f) => f && Object.keys(f).length); return x.length ? { $and: x } : {}; };
+const hasOtherFilters = (st) => !!((st.q || '').trim() || Object.values(st.sel).some((v) => v !== undefined && v !== null && v !== '') || (st.range && st.range[0] && st.range[1]));
 
 function parseCSV(text) {
   const rows = []; let row = [], cur = '', q = false;
@@ -57,10 +102,15 @@ const csvCell = (v) => { const s = v == null ? '' : String(v); return /[",\n\r]/
 function Toolbar() {
   const [meta, setMeta] = useState({ fields: {} });
   const [relOpts, setRelOpts] = useState({});
-  const [st, setSt] = useState({ q: '', sel: {}, range: null });
+  const [st, setSt] = useState(() => ({ q: '', sel: {}, range: null, tab: readTabFromUrl() }));
   const [counts, setCounts] = useState({});
+  const [tabCounts, setTabCounts] = useState({});
   const [busy, setBusy] = useState(false);
-  const timer = useRef(); const dlRef = useRef();
+  const timer = useRef(); const countTimer = useRef(); const dlRef = useRef();
+  const stRef = useRef(st); stRef.current = st;
+  const countSeq = useRef(0);       // drops count responses that arrive after a newer request
+  const selfRefresh = useRef(0);    // table refreshes started by this toolbar (not CRUD)
+  const lastPage = useRef(1);       // lets pagination refreshes be told apart from CRUD refreshes
 
   useEffect(() => { (async () => {
     const coll = ctx.dataSourceManager.getDataSource('main').collectionManager.getCollection(CFG.collection); const c = { data: { fields: (coll ? coll.getFields() : []).map((f) => ({ name: f.name, interface: f.interface, enum: f.enum || (f.options && f.options.enum), uiSchema: f.uiSchema || (f.options && f.options.uiSchema) })) } };
@@ -78,34 +128,75 @@ function Toolbar() {
   const enumOpts = (field) => (meta.fields[field]?.enum || meta.fields[field]?.uiSchema?.enum || []).map((e) => ({ value: e.value, label: clean(e.label) }));
   const selOptions = (s) => s.rel ? (relOpts[s.rel.collection] || []).map(({ value, label }) => ({ value, label })) : s.options ? s.options.map(([value, label]) => ({ value, label })) : enumOpts(s.field);
 
-  const refreshCounts = async (state) => {
-    const base = buildFilter(state);
-    const out = {};
-    const r0 = await req(CFG.collection + ':list', { pageSize: 1, filter: base }); out.__view = r0.meta?.count ?? 0;
-    for (const k of CFG.kpis || []) {
-      const f = merge(buildFilter(state, k.select), { [k.select]: { $eq: k.value } });
-      const r = await req(CFG.collection + ':list', { pageSize: 1, filter: f }); out[k.label] = r.meta?.count ?? 0;
+  // Counts are one-row list requests (meta.count only), filtered on the server. Tab counts ignore the
+  // tab itself, so switching tabs only needs the status counts again ({ tabs: false }).
+  const refreshCounts = async (state, { tabs = true } = {}) => {
+    const seq = ++countSeq.current;
+    const kpis = {}; const tabOut = {};
+    const jobs = [];
+    if (tabs) {
+      const base = buildFilter(state, { skipTab: true });
+      TAB_LIST.forEach((t) => jobs.push(req(CFG.collection + ':list', { pageSize: 1, filter: merge(base, t.filter) }).then((r) => { tabOut[t.key] = r.meta?.count ?? 0; })));
     }
-    setCounts(out);
+    (CFG.kpis || []).forEach((k) => {
+      const f = merge(buildFilter(state, { skipSelect: k.select }), { [k.select]: { $eq: k.value } });
+      jobs.push(req(CFG.collection + ':list', { pageSize: 1, filter: f }).then((r) => { kpis[k.label] = r.meta?.count ?? 0; }));
+    });
+    await Promise.all(jobs);
+    if (seq !== countSeq.current) return;
+    setCounts(kpis);
+    if (tabs) setTabCounts(tabOut);
+  };
+  const scheduleCounts = () => {
+    clearTimeout(countTimer.current);
+    countTimer.current = setTimeout(() => refreshCounts(stRef.current).catch(() => {}), 200);
   };
 
-  const apply = async (state) => {
+  const apply = async (state, { tabs = true } = {}) => {
     const t = getTable(); const f = buildFilter(state);
     if (t?.resource) {
       if (Object.keys(f).length) t.resource.addFilterGroup(GROUP, f); else t.resource.removeFilterGroup(GROUP);
-      t.resource.setPage(1); await t.resource.refresh();
+      t.resource.setPage(1);
+      selfRefresh.current += 1;
+      try { await t.resource.refresh(); }
+      catch (e) { message.error('Could not load appointments: ' + (e?.message || e)); }
+      finally { selfRefresh.current -= 1; lastPage.current = typeof t.resource.getPage === 'function' ? t.resource.getPage() : 1; }
     }
-    refreshCounts(state).catch(() => {});
+    refreshCounts(state, { tabs }).catch(() => {});
   };
-  useEffect(() => { refreshCounts(st).catch(() => {}); }, []);
+
+  useEffect(() => {
+    let cancelled = false; let off = null;
+    if (stRef.current.tab === DEFAULT_TAB) refreshCounts(stRef.current).catch(() => {});
+    (async () => {
+      const t = await whenTableReady();
+      if (cancelled || !t || !t.resource || typeof t.resource.on !== 'function') return;
+      lastPage.current = typeof t.resource.getPage === 'function' ? t.resource.getPage() : 1;
+      // A refresh the toolbar did not start means a record was created, edited or deleted (or the user
+      // pressed Refresh): the tab and status counts may have changed. Page changes do not change counts.
+      const onRefresh = () => {
+        const page = typeof t.resource.getPage === 'function' ? t.resource.getPage() : 1;
+        const paged = page !== lastPage.current; lastPage.current = page;
+        if (selfRefresh.current > 0 || paged) return;
+        scheduleCounts();
+      };
+      t.resource.on('refresh', onRefresh);
+      off = () => t.resource.off('refresh', onRefresh);
+      // Deep link such as ?tab=events: the table is filtered once it exists.
+      if (stRef.current.tab !== DEFAULT_TAB) await apply(stRef.current);
+    })().catch((e) => console.error(e));
+    return () => { cancelled = true; clearTimeout(countTimer.current); clearTimeout(timer.current); if (off) off(); };
+  }, []);
 
   const update = (patch, debounce) => {
     const next = { ...st, ...patch, sel: { ...st.sel, ...(patch.sel || {}) } };
-    setSt(next);
+    setSt(next); stRef.current = next;
+    if ('tab' in patch && patch.tab !== st.tab) writeTabToUrl(next.tab);
+    const tabOnly = Object.keys(patch).length === 1 && 'tab' in patch;
     clearTimeout(timer.current);
-    if (debounce) timer.current = setTimeout(() => apply(next), 350); else apply(next);
+    if (debounce) timer.current = setTimeout(() => apply(next), 350); else apply(next, { tabs: !tabOnly });
   };
-  const clearAll = () => { const n = { q: '', sel: {}, range: null }; setSt(n); apply(n); };
+  const clearAll = () => { const n = { q: '', sel: {}, range: null, tab: st.tab }; setSt(n); stRef.current = n; apply(n); };
 
   const fmt = (col, v) => {
     if (v == null) return '';
@@ -167,8 +258,8 @@ function Toolbar() {
           ok++;
         } catch (e) { errs.push('Row ' + (i + 1) + ': ' + (e?.response?.data?.errors?.[0]?.message || e?.message || e)); }
       }
-      const t = getTable(); if (t?.resource) await t.resource.refresh();
-      refreshCounts(st).catch(() => {});
+      // The table refresh below also refreshes the counts (see the refresh listener).
+      const t = getTable(); if (t?.resource) await t.resource.refresh(); else scheduleCounts();
       if (errs.length) antd.Modal.warning({ title: 'Imported ' + ok + ' of ' + (rows.length - 1) + ' rows', width: 560, content: h('div', { style: { maxHeight: 300, overflow: 'auto', whiteSpace: 'pre-wrap', fontSize: 12 } }, errs.join('\n')) });
       else message.success('Imported ' + ok + ' rows');
     } catch (e) { message.error('Import failed: ' + (e?.message || e)); } finally { setBusy(false); }
@@ -179,11 +270,32 @@ function Toolbar() {
     h('div', { style: { fontSize: 12, color: '#6b7280' } }, label),
     h('div', { style: { fontSize: 20, fontWeight: 600, color: color || '#111827', marginTop: 2 } }, value ?? '–'));
 
-  const kpiRow = h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', paddingBottom: 14, borderBottom: '1px solid #f0f0f0', marginBottom: 14 } },
-    tile((CFG.noun || 'Records') + ' in view', counts.__view, null, !Object.values(st.sel).some((v) => v !== undefined && v !== null), () => update({ sel: Object.fromEntries((CFG.kpis || []).map((k) => [k.select, undefined])) })),
+  const activeTab = tabByKey(st.tab);
+  const viewCount = tabCounts[st.tab];
+  // antd's Tabs (rc-tabs 15.5) moves focus with the arrow keys, but Enter/Space re-activate the *current* tab
+  // instead of the focused one, so a keyboard user could never switch. Select the focused tab here.
+  const onTabsKeyDown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ' && e.code !== 'Space') return;
+    const node = e.target && e.target.closest ? e.target.closest('[data-node-key]') : null;
+    const key = node ? decodeURIComponent(node.getAttribute('data-node-key')) : null;
+    if (key && TAB_LIST.some((t) => t.key === key) && key !== stRef.current.tab) { e.preventDefault(); update({ tab: key }); }
+  };
+  const tabsNav = h('div', { key: 'tabs', onKeyDown: onTabsKeyDown },
+    h(Tabs, {
+      activeKey: st.tab, onChange: (key) => update({ tab: key }), style: { marginBottom: 12 }, tabBarStyle: { marginBottom: 0 },
+      items: TAB_LIST.map((t) => ({
+        key: t.key,
+        // the literal space keeps the accessible name readable ("Sessions 47"), not "Sessions47"
+        label: h('span', null, t.label, tabCounts[t.key] !== undefined && ' ',
+          tabCounts[t.key] !== undefined && h('span', { style: { marginLeft: 2, padding: '0 8px', borderRadius: 10, fontSize: 12, background: t.key === st.tab ? '#e6f4ff' : '#f5f5f5', color: t.key === st.tab ? '#1677ff' : '#6b7280' } }, tabCounts[t.key])),
+      })),
+    }));
+
+  const kpiRow = h('div', { key: 'kpis', style: { display: 'flex', gap: 10, flexWrap: 'wrap', paddingBottom: 14, borderBottom: '1px solid #f0f0f0', marginBottom: 14 } },
+    tile((activeTab.key === DEFAULT_TAB ? CFG.noun : activeTab.label) + ' in view', viewCount, null, !Object.values(st.sel).some((v) => v !== undefined && v !== null), () => update({ sel: Object.fromEntries((CFG.kpis || []).map((k) => [k.select, undefined])) })),
     ...(CFG.kpis || []).map((k) => tile(k.label, counts[k.label], k.color, st.sel[k.select] === k.value, () => update({ sel: { [k.select]: st.sel[k.select] === k.value ? undefined : k.value } }))));
 
-  const filters = h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
+  const filters = h('div', { key: 'filters', style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
     CFG.search && h(Input, { key: 'q', allowClear: true, placeholder: CFG.search.placeholder || 'Search', value: st.q, onChange: (e) => update({ q: e.target.value }, true), style: { flex: '2 1 240px', minWidth: 200 }, prefix: h('span', { style: { color: '#9ca3af' } }, '⌕') }),
     ...(CFG.selects || []).map((s) => h(Select, { key: s.field, allowClear: true, showSearch: true, optionFilterProp: 'label', placeholder: s.placeholder, value: st.sel[s.field], options: selOptions(s), onChange: (v) => update({ sel: { [s.field]: v } }), style: { flex: '1 1 170px', minWidth: 150 } })),
     CFG.dateRange && h('span', { key: 'dr', style: { display: 'inline-flex', alignItems: 'center', gap: 6, flex: '1 1 300px' } },
@@ -194,6 +306,16 @@ function Toolbar() {
       h(Upload, { accept: '.csv,text/csv', showUploadList: false, beforeUpload: importCSV }, h(Tooltip, { title: 'Headers must match the exported CSV' }, h(Button, { loading: busy }, 'Import CSV'))),
       h(Button, { onClick: exportCSV, loading: busy }, 'Export CSV')));
 
-  return h('div', { style: { background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 } }, kpiRow, filters, h('a', { ref: dlRef, style: { display: 'none' } }));
+  // Announced politely when a tab or filter yields no records; the table below shows its own empty grid.
+  let emptyNote = null;
+  if (viewCount === 0) {
+    const catLabel = (enumOpts('category').find((e) => e.value === activeTab.category) || {}).label || activeTab.label;
+    if (hasOtherFilters(st)) emptyNote = [(activeTab.key === DEFAULT_TAB ? 'No appointments' : 'No ' + activeTab.label.toLowerCase()) + ' match these filters. ', h(Button, { key: 'clear', type: 'link', size: 'small', onClick: clearAll, style: { padding: 0 } }, 'Clear filters')];
+    else if (activeTab.key === DEFAULT_TAB) emptyNote = 'No appointments yet. Use New appointment to book the first one.';
+    else emptyNote = 'No ' + activeTab.label.toLowerCase() + ' yet. Set an appointment’s category to ' + catLabel + ' when you create or edit it.';
+  }
+  const emptyRegion = h('div', { key: 'empty', role: 'status', 'aria-live': 'polite', style: emptyNote ? { marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fafafa', border: '1px dashed #d9d9d9', color: '#4b5563', fontSize: 13 } : undefined }, emptyNote);
+
+  return h('div', { style: { background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 } }, tabsNav, kpiRow, filters, emptyRegion, h('a', { key: 'dl', ref: dlRef, style: { display: 'none' } }));
 }
 ctx.render(h(Toolbar));

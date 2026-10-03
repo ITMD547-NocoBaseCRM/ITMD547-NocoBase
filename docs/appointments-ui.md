@@ -1,4 +1,4 @@
-# Appointments management UI (US-26 / T-42)
+# Appointments management UI (US-26 / T-42, T-43)
 
 The Appointments page lives in the NocoBase flow-engine (database-stored UI), not in React source.
 It is authored declaratively and re-applied through NocoBase's own `flowSurfaces:applyBlueprint`
@@ -10,7 +10,7 @@ Page: **Salon Management → Appointments** (`/admin/7rbhpfmdhv5`).
 
 | Area | Implementation |
 | --- | --- |
-| Overview toolbar | JS block (`scripts/ui/appointments-toolbar.js`): status KPI tiles, search, category/status/technician selects, date range, CSV export/import. Binds to the table dynamically. |
+| Overview toolbar | JS block (`scripts/ui/appointments-toolbar.js`): All / Sessions / Events tabs, status KPI tiles, search, status/technician selects, date range, CSV export/import. Binds to the table dynamically. |
 | Appointments table | Native table block, 20 rows per page, newest date first. Columns: date, start, end, customer, phone, technician, category, status, services, notes. Filter, refresh, bulk delete. |
 | New appointment | Primary button opening a drawer with a create form: customer*, category*, booked services (inline sub-table: service, price, duration, notes), technician, date*, start*, end, status*, notes. |
 | View | Drawer with appointment details, an Edit action, and a booked-services table (own view/edit/delete). |
@@ -18,6 +18,27 @@ Page: **Salon Management → Appointments** (`/admin/7rbhpfmdhv5`).
 | Delete | Row action with a confirmation dialog naming the appointment and its services; bulk delete also confirms. |
 
 `*` = required in the form and `NOT NULL` in the database (T-40).
+
+## Type tabs: All / Sessions / Events (T-43)
+
+The tabs sit at the top of the toolbar and filter the table by the T-40 `category` field (`session` or
+`event`). Their labels and filters are not written in the toolbar script: `scripts/appointments-schema.js`
+(`CATEGORY_TABS`, `getCategoryFilter`) is the single source, injected into the script when the blueprint
+is built.
+
+| Behaviour | How it works |
+| --- | --- |
+| Authorisation | Filtering is always done by the server. The category filter is added to the table's own request and to the count requests, so the signed-in user's role scope is applied together with it. Rows are never fetched to be filtered in the browser. The only unfiltered row request is the table's own first load. |
+| All | No category filter: every appointment the user may view. |
+| Tab counts | Three one-row requests (`meta.count` only), computed with the other filters (search, status, staff, date) applied, so each tab shows how many records it would list. |
+| Switching tabs | One filtered table request plus the five status counts. Tab counts are not refetched because they do not depend on the tab. |
+| Create, edit, delete | The table refreshes with the filter still applied, so a new Event appears under Events and not under Sessions, an edited category moves the record between tabs, and a deleted record disappears. The toolbar listens for table refreshes it did not start and refreshes the counts once (bursts are coalesced; page changes are ignored). |
+| URL | The tab is kept in `?tab=sessions` / `?tab=events` (replace, no history entries; All leaves the URL clean). A link opens the right tab, and an unknown value falls back to All. Other filters are not in the URL. |
+| Empty state | A polite live region explains an empty tab ("No events yet. Set an appointment's category to Event ...") or a filter that matches nothing, with a Clear filters button. Clear keeps the selected tab. |
+| Keyboard | antd tabs: arrow keys move focus, Home/End jump. The installed rc-tabs (15.5.2) makes Enter and Space re-activate the current tab instead of the focused one, so the toolbar selects the focused tab itself. |
+| Responsive | The three tabs fit within 375px; the toolbar controls wrap. |
+
+The category dropdown that T-42 added to the toolbar was removed: with tabs it would contradict them.
 
 ## Validation and states
 
@@ -36,6 +57,7 @@ yarn migrate:appointments-ui-labels        # readable titleField / relation labe
 yarn migrate:appointment-services-cascade  # cascade delete of booked-service lines (restart app after)
 yarn apply:appointments-ui                 # (re)author the page through flowSurfaces:applyBlueprint, then stack blocks
 yarn apply:appointments-ui --layout-only   # only re-stack the live page blocks (seconds, safe to repeat)
+yarn apply:appointments-toolbar            # replace only the toolbar script in place (seconds, no-op if unchanged)
 yarn validate:appointments-ui              # read the page back and assert the CRUD structure
 yarn test:appointments-ui                  # unit tests for the blueprint builder
 ```

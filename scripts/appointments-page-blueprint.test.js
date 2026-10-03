@@ -8,8 +8,9 @@ const {
   formFields,
   formLayout,
   readToolbarScript,
+  toolbarTabs,
 } = require('./appointments-page-blueprint');
-const { REQUIRED_FIELDS } = require('./appointments-schema');
+const { CATEGORY_TABS, REQUIRED_FIELDS } = require('./appointments-schema');
 
 const blueprint = buildAppointmentsPageBlueprint({ toolbarCode: '// toolbar' });
 const tab = blueprint.tabs[0];
@@ -105,6 +106,40 @@ test('toolbar script is embedded as a page asset and binds the table dynamically
   assert.equal(tab.blocks[0].script, 'toolbar');
   assert.equal(blueprint.assets.scripts.toolbar.code, '// toolbar');
   const code = readToolbarScript();
-  assert.ok(code.includes('"field":"category"'));
   assert.ok(code.includes('siblings.find(isAppointmentsTable)'));
+});
+
+test('toolbar tabs come from the T-40 schema module and carry the real category filters', () => {
+  const tabs = toolbarTabs();
+  assert.deepEqual(
+    tabs.map(({ key, label, category }) => [key, label, category]),
+    CATEGORY_TABS.map(({ key, label, category }) => [key, label, category]),
+  );
+  assert.deepEqual(
+    tabs.map((entry) => entry.filter),
+    [{}, { category: { $eq: 'session' } }, { category: { $eq: 'event' } }],
+  );
+
+  const code = readToolbarScript();
+  assert.ok(!code.includes('/*APPOINTMENT_TABS*/'), 'the placeholder must be replaced');
+  assert.ok(code.includes(`const TABS = ${JSON.stringify(tabs)};`), 'tabs are injected verbatim');
+  assert.ok(code.includes('"$eq":"event"'), 'a "$" in the injected JSON must stay literal');
+  // The old category dropdown is replaced by the tabs; a second control would contradict them.
+  assert.ok(!code.includes('"field":"category","placeholder"'));
+});
+
+test('the toolbar only uses globals that the RunJS validator accepts', () => {
+  const code = readToolbarScript();
+  // flowSurfaces rejects unknown RunJS globals when the script is written; URLSearchParams is one of them
+  assert.ok(!code.includes('URLSearchParams'));
+  assert.ok(!code.includes('structuredClone'));
+});
+
+test('the toolbar never fetches appointment rows just to filter them', () => {
+  const code = readToolbarScript();
+  // counts are one-row requests; row data is requested only by the export action
+  const listCalls = code.match(/CFG\.collection \+ ':list'[^)]*\)/g) || [];
+  const rowFetches = listCalls.filter((call) => !call.includes('pageSize: 1'));
+  assert.equal(rowFetches.length, 1, 'only the CSV export may request rows');
+  assert.ok(rowFetches[0].includes('paginate: false') && rowFetches[0].includes('buildFilter(st)'));
 });

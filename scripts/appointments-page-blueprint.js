@@ -13,7 +13,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { REQUIRED_FIELDS } = require('./appointments-schema');
+const { CATEGORY_TABS, REQUIRED_FIELDS, getCategoryFilter } = require('./appointments-schema');
 
 const PAGE_SCHEMA_UID = '7rbhpfmdhv5'; // "Appointments" page under the Salon Management menu group
 const TOOLBAR_SCRIPT_PATH = path.join(__dirname, 'ui', 'appointments-toolbar.js');
@@ -99,8 +99,21 @@ function editPopup(key) {
   };
 }
 
+// The toolbar script declares its type tabs as `const TABS = /*APPOINTMENT_TABS*/[];`. They are filled in
+// from the T-40 schema module so the tab labels and their server-side category filters have one source.
+const TABS_PLACEHOLDER = '/*APPOINTMENT_TABS*/[]';
+
+function toolbarTabs() {
+  return CATEGORY_TABS.map(({ key, label, category }) => ({ key, label, category, filter: getCategoryFilter(key) }));
+}
+
 function readToolbarScript() {
-  return fs.readFileSync(TOOLBAR_SCRIPT_PATH, 'utf8');
+  const source = fs.readFileSync(TOOLBAR_SCRIPT_PATH, 'utf8');
+  if (!source.includes(TABS_PLACEHOLDER)) {
+    throw new Error(`${TOOLBAR_SCRIPT_PATH} is missing the ${TABS_PLACEHOLDER} placeholder`);
+  }
+  // A replacer function keeps "$" sequences in the JSON (for example "$eq") literal.
+  return source.replace(TABS_PLACEHOLDER, () => JSON.stringify(toolbarTabs()));
 }
 
 function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolbarCode = readToolbarScript() } = {}) {
@@ -251,4 +264,5 @@ module.exports = {
   formFields,
   formLayout,
   readToolbarScript,
+  toolbarTabs,
 };

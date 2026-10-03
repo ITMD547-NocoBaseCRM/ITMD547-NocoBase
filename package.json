@@ -31,7 +31,8 @@
     "migrate:appointment-services-cascade": "node scripts/run-appointment-services-cascade-migration.js",
     "apply:appointments-ui": "node scripts/apply-appointments-ui.js",
     "validate:appointments-ui": "node scripts/validate-appointments-ui.js",
-    "test:appointments-ui": "node --test scripts/appointments-page-blueprint.test.js scripts/appointments-page-layout.test.js"
+    "test:appointments-ui": "node --test scripts/appointments-page-blueprint.test.js scripts/appointments-page-layout.test.js scripts/appointments-toolbar.test.js",
+    "apply:appointments-toolbar": "node scripts/apply-appointments-toolbar.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",

@@ -2,7 +2,12 @@
 //
 // Usage: yarn validate:appointments-ui [--page-schema-uid <uid>]
 
-const { PAGE_SCHEMA_UID, REQUIRED_FORM_FIELDS } = require('./appointments-page-blueprint');
+const {
+  PAGE_SCHEMA_UID,
+  REQUIRED_FORM_FIELDS,
+  readToolbarScript,
+  toolbarTabs,
+} = require('./appointments-page-blueprint');
 const {
   findDetailsLayoutTarget,
   findNode,
@@ -78,7 +83,14 @@ async function main() {
   const toolbar = nodes.find((node) => node.use === 'JSBlockModel');
   expect(toolbar, 'toolbar JSBlockModel is missing');
   const toolbarCode = String(toolbar.stepParams?.jsSettings?.runJs?.code || '');
-  expect(toolbarCode.includes('"field":"category"'), 'toolbar is missing the category filter');
+  // The live toolbar must be exactly what the repo builds: type tabs, URL sync and refresh handling included.
+  expect(
+    toolbarCode === readToolbarScript(),
+    'toolbar script differs from the repo version; run yarn apply:appointments-toolbar',
+  );
+  for (const tab of toolbarTabs()) {
+    expect(toolbarCode.includes(JSON.stringify(tab)), `toolbar is missing the ${tab.label} tab`);
+  }
   expect(
     toolbarCode.includes('siblings.find(isAppointmentsTable)'),
     'toolbar still binds the table by hard-coded uid only',
