@@ -10,3 +10,6 @@ packages/**/lib/**
 packages/**/esm/**
 packages/**/node_modules/**
 packages/core/client/src/locale/*
+
+# Runtime JS snippets embedded verbatim into NocoBase pages; keep byte-for-byte
+scripts/ui/

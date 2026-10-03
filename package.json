@@ -26,7 +26,12 @@
     "test:appointments-collection": "node --test scripts/appointments-schema.test.js",
     "migrate:appointments-migration-prep": "node scripts/run-appointments-migration-prep.js",
     "validate:appointments-migration-prep": "node scripts/validate-appointments-migration-prep.js",
-    "test:appointments-import": "node --test scripts/appointments-import.test.js"
+    "test:appointments-import": "node --test scripts/appointments-import.test.js",
+    "migrate:appointments-ui-labels": "node scripts/run-appointments-ui-labels-migration.js",
+    "migrate:appointment-services-cascade": "node scripts/run-appointment-services-cascade-migration.js",
+    "apply:appointments-ui": "node scripts/apply-appointments-ui.js",
+    "validate:appointments-ui": "node scripts/validate-appointments-ui.js",
+    "test:appointments-ui": "node --test scripts/appointments-page-blueprint.test.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",
