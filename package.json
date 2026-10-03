@@ -20,7 +20,10 @@
     "e2e": "nocobase-v1 e2e",
     "tar": "nocobase-v1 tar",
     "postinstall": "nocobase-v1 postinstall",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "migrate:appointments-collection": "node scripts/run-appointments-collection-migration.js",
+    "validate:appointments-collection": "node scripts/validate-appointments-collection.js",
+    "test:appointments-collection": "node --test scripts/appointments-schema.test.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",
