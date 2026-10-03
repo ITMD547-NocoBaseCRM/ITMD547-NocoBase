@@ -7,6 +7,7 @@ const {
   buildAppointmentsPageBlueprint,
   formFields,
   formLayout,
+  readSensitivityScript,
   readToolbarScript,
   toolbarTabs,
 } = require('./appointments-page-blueprint');
@@ -32,7 +33,10 @@ test('table shows the T-40 domain fields and relations by readable paths', () =>
   assert.ok(columns.includes('customer.firstName'));
   assert.ok(columns.includes('staff.firstName'));
   assert.ok(columns.includes('appointmentServices.service.name'));
-  assert.ok(!columns.some((column) => /skin|sensitiv/i.test(column)), 'customer data must not be copied onto rows');
+  // customer data is only ever read through the customer relation, never a field of the appointment itself
+  for (const column of columns.filter((name) => /skin|sensitiv/i.test(name))) {
+    assert.match(column, /^customer./, 'sensitivity data must come through Appointment -> Customer');
+  }
 });
 
 test('full CRUD is wired: create, view, edit, delete with confirmation', () => {
@@ -126,6 +130,46 @@ test('toolbar tabs come from the T-40 schema module and carry the real category 
   assert.ok(code.includes('"$eq":"event"'), 'a "$" in the injected JSON must stay literal');
   // The old category dropdown is replaced by the tabs; a second control would contradict them.
   assert.ok(!code.includes('"field":"category","placeholder"'));
+});
+
+test('customer sensitivities are read through the customer relation by JS renderers, in the table and in details', () => {
+  const cell = table.fields.find((entry) => entry.script === 'sensitivityCell');
+  assert.deepEqual(cell, {
+    key: 'sensitivityCell',
+    field: 'customer.skinSensitivities',
+    renderer: 'js',
+    script: 'sensitivityCell',
+    settings: { label: 'Sensitivities' },
+  });
+  const names = table.fields.map(fieldName);
+  assert.equal(
+    names.indexOf('customer.skinSensitivities'),
+    names.indexOf('customer.firstName') + 1,
+    'next to the customer',
+  );
+
+  const view = table.recordActions.find((action) => action.type === 'view');
+  const details = view.popup.blocks.find((block) => block.type === 'details');
+  const inDetails = details.fields.find((entry) => entry.script === 'sensitivityDetails');
+  assert.equal(inDetails.field, 'customer.skinSensitivities');
+  assert.equal(inDetails.renderer, 'js');
+
+  // never an appointment field of its own, and not part of the create/edit forms
+  const everyField = JSON.stringify([table.fields, details.fields]);
+  assert.ok(!/"field":"skinSensitivities/.test(everyField), 'no sensitivity field directly on the appointment');
+  assert.ok(!JSON.stringify(formFields()).match(/skin|sensitiv/i), 'forms do not carry customer sensitivities');
+});
+
+test('each sensitivity rendering is its own asset with the right variant', () => {
+  const built = buildAppointmentsPageBlueprint();
+  const { sensitivityCell, sensitivityDetails } = built.assets.scripts;
+  assert.equal(sensitivityCell.version, 'v2');
+  assert.match(sensitivityCell.code, /const VARIANT = 'cell';/);
+  assert.match(sensitivityDetails.code, /const VARIANT = 'details';/);
+  assert.equal(sensitivityCell.code, readSensitivityScript('cell'));
+  assert.equal(sensitivityDetails.code, readSensitivityScript('details'));
+  assert.ok(!sensitivityCell.code.includes('/*SENSITIVITY_VARIANT*/'));
+  assert.throws(() => readSensitivityScript('wide'), /Unknown sensitivity variant/);
 });
 
 test('the toolbar only uses globals that the RunJS validator accepts', () => {

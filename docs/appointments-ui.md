@@ -1,4 +1,4 @@
-# Appointments management UI (US-26 / T-42, T-43)
+# Appointments management UI (US-26 / T-42, T-43, T-44)
 
 The Appointments page lives in the NocoBase flow-engine (database-stored UI), not in React source.
 It is authored declaratively and re-applied through NocoBase's own `flowSurfaces:applyBlueprint`
@@ -39,6 +39,25 @@ is built.
 | Responsive | The three tabs fit within 375px; the toolbar controls wrap. |
 
 The category dropdown that T-42 added to the toolbar was removed: with tabs it would contradict them.
+
+## Customer sensitivity indicator (T-44)
+
+Salon staff see a customer's recorded skin sensitivities on the appointment, in the table and in the details
+drawer. The data is US-01's, read through **Appointment → Customer → Skin sensitivities**
+(`customers.skinSensitivities`, a text array whose labels come from the field's enum, plus the free-text
+`skinSensitivitiesOther`). Nothing is stored on the appointment and no second sensitivity model exists.
+
+| Topic | Behaviour |
+| --- | --- |
+| Table | A "Sensitivities" column next to the customer. Recorded sensitivities show an amber pill with a warning triangle, the word "Sensitivities" and a count, so the meaning is in the shape and the text, not the colour. Amber, not red: it is a caution to notice, not an error. |
+| Details | The View drawer lists every recorded sensitivity inline under "Customer skin sensitivities". |
+| Interaction | The pill is a real button. Click, tap, Enter or Space opens a panel with the list; Escape or a click outside closes it. Nothing needs hover. The button's accessible name already carries the full list ("Skin sensitivities recorded: Latex, Essential Oils. Press to show details."), so a screen reader does not need the panel. |
+| Wording | No record reads **"No sensitivities recorded"**, never "no sensitivities" or "no allergies": an empty profile means nothing was captured. If the role cannot see the customer's sensitivity fields the cell says "Sensitivity information not available" instead of claiming anything. Free text without the Other option ticked is still shown. |
+| Requests | None of its own. The table's single list request already appends the customer relation, so each row arrives with its customer: no per-row request (no N+1). The toolbar's dropdown options now load only `id` and name fields, so customer health data is not loaded into the browser for a dropdown. |
+| Authorisation | The customer reaches the browser only inside an appointment the user may read, so the appointment role scope decides. Verified with a real restricted staff account: it received only its assigned appointment (with that customer's sensitivities), another staff member's appointment returned nothing by id, filtering by another customer returned nothing, and the tab counts were scoped the same way. |
+
+The renderer is `scripts/ui/appointments-sensitivity.js` (a JS field renderer, two variants chosen when the
+blueprint is built) and its behaviour is covered by `scripts/appointments-sensitivity.test.js`.
 
 ## Validation and states
 

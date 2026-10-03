@@ -7,48 +7,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { JSDOM, VirtualConsole } = require('jsdom');
+const { installDom } = require('./test-support/jsdom-env');
 
 // --- DOM environment: must exist before React, antd or Testing Library are loaded -----------------
-const dom = new JSDOM('<!doctype html><html><body></body></html>', {
-  url: 'http://localhost/admin/7rbhpfmdhv5',
-  pretendToBeVisual: true,
-  virtualConsole: new VirtualConsole(),
-});
-const { window } = dom;
-// Expose jsdom's DOM classes (SVGElement, KeyboardEvent, ...) the way a jest-style environment does.
-for (const name of Object.getOwnPropertyNames(window)) {
-  if (/^[A-Z]/.test(name) && !(name in globalThis)) {
-    try {
-      Object.defineProperty(globalThis, name, { value: window[name], configurable: true, writable: true });
-    } catch {
-      // read-only host globals are left alone
-    }
-  }
-}
-Object.assign(globalThis, {
-  window,
-  document: window.document,
-  HTMLElement: window.HTMLElement,
-  Node: window.Node,
-  getComputedStyle: window.getComputedStyle.bind(window),
-  MutationObserver: window.MutationObserver,
-  requestAnimationFrame: (cb) => setTimeout(cb, 0),
-  cancelAnimationFrame: (id) => clearTimeout(id),
-  IS_REACT_ACT_ENVIRONMENT: true,
-});
-Object.defineProperty(globalThis, 'navigator', { value: window.navigator, configurable: true });
-window.matchMedia =
-  window.matchMedia ||
-  (() => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} }));
-window.ResizeObserver =
-  window.ResizeObserver ||
-  class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  };
-globalThis.ResizeObserver = window.ResizeObserver;
+const { window } = installDom({ url: 'http://localhost/admin/7rbhpfmdhv5' });
 
 const React = require('react');
 const antd = require('antd');
@@ -399,6 +361,22 @@ test('an unknown tab in the URL falls back to All', async () => {
   await settle(300);
   assert.equal(resource.refreshCalls, 0);
   assert.deepEqual(resource.filterGroups, {});
+});
+
+test('dropdown options load only id and label fields, never a whole customer record', async () => {
+  const { calls } = mount();
+  await waitFor(() => assert.ok(calls.some((call) => call.url === 'customers:list')), { timeout: 3000 });
+  const optionCalls = calls.filter((call) => call.url === 'customers:list' || call.url === 'staff:list');
+  assert.deepEqual(optionCalls.map((call) => call.url).sort(), ['customers:list', 'staff:list']);
+  for (const call of optionCalls) {
+    assert.deepEqual(
+      call.params.fields,
+      ['id', 'firstName', 'lastName'],
+      call.url + ' must request a minimal field list',
+    );
+  }
+  // customer health data (skin sensitivities) never needs to reach the browser for a dropdown
+  assert.ok(!JSON.stringify(calls).includes('skinSensitivities'));
 });
 
 test('the toolbar removes its refresh listener when it unmounts', async () => {

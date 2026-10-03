@@ -5,6 +5,7 @@
 const {
   PAGE_SCHEMA_UID,
   REQUIRED_FORM_FIELDS,
+  readSensitivityScript,
   readToolbarScript,
   toolbarTabs,
 } = require('./appointments-page-blueprint');
@@ -44,6 +45,10 @@ const fieldPathOf = (node) => node.stepParams?.fieldSettings?.init?.fieldPath;
 const collectionOf = (node) =>
   node.stepParams?.resourceSettings?.init?.collectionName || node.stepParams?.resourceSettings?.init?.associationName;
 const titleOf = (node) => String(node.stepParams?.buttonSettings?.general?.title ?? node.props?.title ?? '');
+
+// The RunJS source of a JS-rendered field (table column or details item), read from its JSFieldModel.
+const jsCodeOf = (node) =>
+  String(collect(node).find((child) => child.use === 'JSFieldModel')?.stepParams?.jsSettings?.runJs?.code || '');
 
 const readSurface = getSurface;
 
@@ -91,6 +96,19 @@ async function main() {
   for (const tab of toolbarTabs()) {
     expect(toolbarCode.includes(JSON.stringify(tab)), `toolbar is missing the ${tab.label} tab`);
   }
+  // Customer sensitivities (T-44) come through the customer relation, never as a field of the appointment.
+  const sensitivityColumn = columns.find(
+    (node) => node.use === 'TableColumnModel' && fieldPathOf(node) === 'customer.skinSensitivities',
+  );
+  expect(sensitivityColumn, 'table column for the customer sensitivities is missing');
+  expect(
+    jsCodeOf(sensitivityColumn) === readSensitivityScript('cell'),
+    'the sensitivity column script differs from the repo version; re-apply the page',
+  );
+  expect(
+    !columnPaths.some((path) => /^(skinSensitivities|skinProfile)/.test(String(path))),
+    'sensitivities must not be a field of the appointment itself',
+  );
   expect(
     toolbarCode.includes('siblings.find(isAppointmentsTable)'),
     'toolbar still binds the table by hard-coded uid only',
@@ -165,6 +183,14 @@ async function main() {
   expect(
     viewNodes.some((node) => node.use === 'EditActionModel'),
     'view popup has no Edit action',
+  );
+  const detailsSensitivity = viewNodes.find(
+    (node) => node.use === 'DetailsItemModel' && fieldPathOf(node) === 'customer.skinSensitivities',
+  );
+  expect(detailsSensitivity, 'view popup details do not show the customer sensitivities');
+  expect(
+    jsCodeOf(detailsSensitivity) === readSensitivityScript('details'),
+    'the details sensitivity script differs from the repo version; re-apply the page',
   );
   expect(
     viewNodes.some((node) => node.use === 'DetailsItemModel' && fieldPathOf(node) === 'category'),

@@ -119,7 +119,9 @@ function Toolbar() {
     const ro = {};
     for (const s of [...(CFG.selects || []), ...(CFG.columns || []).filter((c) => c.rel).map((c) => ({ rel: c.rel }))]) {
       if (!s.rel || ro[s.rel.collection]) continue;
-      const r = await req(s.rel.collection + ':list', { paginate: false });
+      // Only the id and the label fields: the options need nothing else, and the customer record also holds
+      // health-related data (skin sensitivities) that must not be loaded into the browser for a dropdown.
+      const r = await req(s.rel.collection + ':list', { paginate: false, fields: ['id', ...s.rel.label] });
       ro[s.rel.collection] = (r.data || []).map((x) => ({ value: x.id, label: s.rel.label.map((k) => x[k]).filter(Boolean).join(' ') || String(x.id), raw: x }));
     }
     setRelOpts(ro);

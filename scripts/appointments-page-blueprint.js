@@ -17,6 +17,7 @@ const { CATEGORY_TABS, REQUIRED_FIELDS, getCategoryFilter } = require('./appoint
 
 const PAGE_SCHEMA_UID = '7rbhpfmdhv5'; // "Appointments" page under the Salon Management menu group
 const TOOLBAR_SCRIPT_PATH = path.join(__dirname, 'ui', 'appointments-toolbar.js');
+const SENSITIVITY_SCRIPT_PATH = path.join(__dirname, 'ui', 'appointments-sensitivity.js');
 
 // Fields the create/edit forms must mark required (DB NOT NULL columns from T-40).
 const REQUIRED_FORM_FIELDS = ['customer', 'category', 'appointmentDate', 'startTime', 'status'];
@@ -75,6 +76,13 @@ function formLayout() {
   return { rows: FORM_LAYOUT_ROWS.map((row) => row.map(([key, span]) => ({ key, span }))) };
 }
 
+// Customer skin sensitivities (US-01) read through the appointment's customer relation and drawn by a JS
+// renderer. Binding to the real field path makes the table append the customer relation it already loads, so
+// no extra request is made and nothing is copied onto the appointment.
+function sensitivityField(script, label = 'Sensitivities') {
+  return { key: script, field: 'customer.skinSensitivities', renderer: 'js', script, settings: { label } };
+}
+
 function bookedServicesTable(title) {
   return {
     key: 'services',
@@ -116,7 +124,26 @@ function readToolbarScript() {
   return source.replace(TABS_PLACEHOLDER, () => JSON.stringify(toolbarTabs()));
 }
 
-function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolbarCode = readToolbarScript() } = {}) {
+// The sensitivity indicator script has two renderings: a compact button for table rows ('cell') and an inline
+// list for the details drawer ('details'). The variant literal in the file is filled in here.
+const SENSITIVITY_VARIANTS = ['cell', 'details'];
+const SENSITIVITY_PLACEHOLDER = "/*SENSITIVITY_VARIANT*/'cell'";
+
+function readSensitivityScript(variant = 'cell') {
+  if (!SENSITIVITY_VARIANTS.includes(variant)) throw new Error(`Unknown sensitivity variant: ${variant}`);
+  const source = fs.readFileSync(SENSITIVITY_SCRIPT_PATH, 'utf8');
+  if (!source.includes(SENSITIVITY_PLACEHOLDER)) {
+    throw new Error(`${SENSITIVITY_SCRIPT_PATH} is missing the ${SENSITIVITY_PLACEHOLDER} placeholder`);
+  }
+  return source.replace(SENSITIVITY_PLACEHOLDER, () => `'${variant}'`);
+}
+
+function buildAppointmentsPageBlueprint({
+  pageSchemaUid = PAGE_SCHEMA_UID,
+  toolbarCode = readToolbarScript(),
+  sensitivityCellCode = readSensitivityScript('cell'),
+  sensitivityDetailsCode = readSensitivityScript('details'),
+} = {}) {
   return {
     version: '1',
     mode: 'replace',
@@ -140,7 +167,13 @@ function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolb
         },
       },
     },
-    assets: { scripts: { toolbar: { code: toolbarCode } } },
+    assets: {
+      scripts: {
+        toolbar: { code: toolbarCode },
+        sensitivityCell: { version: 'v2', code: sensitivityCellCode },
+        sensitivityDetails: { version: 'v2', code: sensitivityDetailsCode },
+      },
+    },
     tabs: [
       {
         key: 'main',
@@ -172,6 +205,7 @@ function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolb
               'startTime',
               'endTime',
               { field: 'customer.firstName', settings: { label: 'Customer' } },
+              sensitivityField('sensitivityCell'),
               { field: 'customer.phone', settings: { label: 'Phone' } },
               { field: 'staff.firstName', settings: { label: 'Technician' } },
               'category',
@@ -225,6 +259,7 @@ function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolb
                       resource: { binding: 'currentRecord', collectionName: 'appointments' },
                       fields: [
                         { field: 'customer.firstName', settings: { label: 'Customer' } },
+                        sensitivityField('sensitivityDetails', 'Customer skin sensitivities'),
                         { field: 'customer.phone', settings: { label: 'Phone' } },
                         { field: 'staff.firstName', settings: { label: 'Technician' } },
                         'category',
@@ -259,10 +294,13 @@ module.exports = {
   PAGE_SCHEMA_UID,
   REQUIRED_FORM_FIELDS,
   REQUIRED_FIELDS,
+  SENSITIVITY_SCRIPT_PATH,
   TOOLBAR_SCRIPT_PATH,
   buildAppointmentsPageBlueprint,
   formFields,
   formLayout,
+  readSensitivityScript,
   readToolbarScript,
+  sensitivityField,
   toolbarTabs,
 };
