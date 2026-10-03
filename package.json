@@ -32,7 +32,12 @@
     "apply:appointments-ui": "node scripts/apply-appointments-ui.js",
     "validate:appointments-ui": "node scripts/validate-appointments-ui.js",
     "test:appointments-ui": "node --test scripts/appointments-page-blueprint.test.js scripts/appointments-page-layout.test.js scripts/appointments-toolbar.test.js scripts/appointments-sensitivity.test.js",
-    "apply:appointments-toolbar": "node scripts/apply-appointments-toolbar.js"
+    "apply:appointments-toolbar": "node scripts/apply-appointments-toolbar.js",
+    "migrate:appointment-references": "node scripts/run-appointment-references-migration.js",
+    "test:appointments-qa-api": "node --test --test-concurrency=1 --test-timeout=180000 scripts/qa/appointments.api.test.js scripts/qa/appointments.authz.test.js",
+    "test:appointments-qa-ui": "node --test --test-concurrency=1 --test-timeout=2400000 scripts/qa/appointments.ui.test.js",
+    "migrate:appointment-date": "node scripts/run-appointment-date-migration.js",
+    "migrate:appointment-messages": "node scripts/run-appointment-messages-migration.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",

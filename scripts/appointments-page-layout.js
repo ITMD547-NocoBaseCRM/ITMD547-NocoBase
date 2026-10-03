@@ -73,6 +73,50 @@ function findDetailsLayoutTarget(popupTree) {
   ]);
 }
 
+// Every create or edit form below a surface (the opener's popup, including popups nested inside it).
+function findForms(tree) {
+  const forms = [];
+  const walk = (node) => {
+    if (!node) return;
+    if (node.use === 'CreateFormModel' || node.use === 'EditFormModel') forms.push(node);
+    children(node).forEach(walk);
+  };
+  walk(tree);
+  return forms;
+}
+
+// Field path -> uid of the form item that shows it.
+function formItemsByPath(form) {
+  const items = form?.subModels?.grid?.subModels?.items || [];
+  const byPath = {};
+  for (const item of items) {
+    const path = item?.stepParams?.fieldSettings?.init?.fieldPath;
+    if (item.use === 'FormItemModel' && path) byPath[path] = item.uid;
+  }
+  return byPath;
+}
+
+// The paths of `wanted` that the form does not show.
+function missingFormFields(form, wanted) {
+  const present = formItemsByPath(form);
+  return wanted.filter((path) => !present[path]);
+}
+
+// Low-level layout for a form grid from [[path, span], ...] rows: one cell per field, spans per row.
+function formGridLayout(rowSpec, itemsByPath) {
+  const keys = rowSpec.map((_, index) => `row${index + 1}`);
+  const rows = {};
+  const sizes = {};
+  rowSpec.forEach((row, index) => {
+    rows[keys[index]] = row.map(([path]) => {
+      if (!itemsByPath[path]) throw new Error(`The form has no item for ${path}`);
+      return [itemsByPath[path]];
+    });
+    sizes[keys[index]] = row.map(([, span]) => span);
+  });
+  return { rows, sizes, rowOrder: keys };
+}
+
 // Reads a grid node back as rows of cells of uids, in row order.
 function describeGridRows(gridNode) {
   const rows = gridNode?.props?.rows || {};
@@ -105,13 +149,17 @@ function isFullWidthRow(gridNode, uid) {
 module.exports = {
   FULL_WIDTH,
   describeGridRows,
+  formGridLayout,
+  formItemsByPath,
   findAppointmentsTable,
   findDetailsLayoutTarget,
+  findForms,
   findGridWithItems,
   findNode,
   findPageLayoutTarget,
   findRowAction,
   isFullWidthRow,
   isStacked,
+  missingFormFields,
   stackedLayout,
 };

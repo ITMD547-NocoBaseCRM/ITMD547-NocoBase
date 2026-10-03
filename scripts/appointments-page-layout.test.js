@@ -2,6 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   describeGridRows,
+  findForms,
+  formGridLayout,
+  formItemsByPath,
+  missingFormFields,
   findAppointmentsTable,
   findDetailsLayoutTarget,
   findPageLayoutTarget,
@@ -148,4 +152,97 @@ test('isFullWidthRow finds an item alone on a full-width row', () => {
     describeGridRows(grid).map((row) => row.key),
     ['row1', 'row2', 'row3'],
   );
+});
+
+const formItem = (uid, path) => ({
+  uid,
+  use: 'FormItemModel',
+  stepParams: { fieldSettings: { init: { fieldPath: path } } },
+});
+const form = (use, uid, paths) => ({
+  uid,
+  use,
+  subModels: {
+    grid: {
+      uid: uid + '-grid',
+      use: 'FormGridModel',
+      subModels: { items: paths.map((path) => formItem('i-' + path, path)) },
+    },
+  },
+});
+
+test('findForms returns create and edit forms, including ones nested inside other popups', () => {
+  const tree = {
+    use: 'ViewActionModel',
+    subModels: {
+      page: {
+        use: 'ChildPageModel',
+        subModels: {
+          tabs: [
+            {
+              use: 'ChildPageTabModel',
+              subModels: {
+                grid: {
+                  use: 'BlockGridModel',
+                  subModels: {
+                    items: [
+                      {
+                        use: 'DetailsBlockModel',
+                        subModels: {
+                          actions: [
+                            { use: 'EditActionModel', subModels: { page: form('EditFormModel', 'nested', ['a']) } },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+  assert.deepEqual(
+    findForms(tree).map((node) => node.uid),
+    ['nested'],
+  );
+  assert.deepEqual(
+    findForms(form('CreateFormModel', 'top', ['a'])).map((node) => node.uid),
+    ['top'],
+  );
+});
+
+test('missingFormFields reports the wanted fields the form does not show', () => {
+  const create = form('CreateFormModel', 'c', ['customer', 'category', 'startTime']);
+  assert.deepEqual(formItemsByPath(create), {
+    customer: 'i-customer',
+    category: 'i-category',
+    startTime: 'i-startTime',
+  });
+  assert.deepEqual(missingFormFields(create, ['customer', 'appointmentDate', 'startTime', 'status']), [
+    'appointmentDate',
+    'status',
+  ]);
+  assert.deepEqual(missingFormFields(create, ['customer']), []);
+});
+
+test('formGridLayout turns [path, span] rows into one cell per field with the spans per row', () => {
+  const layout = formGridLayout(
+    [
+      [
+        ['customer', 12],
+        ['category', 12],
+      ],
+      [['notes', 24]],
+    ],
+    { customer: 'u1', category: 'u2', notes: 'u3' },
+  );
+  assert.deepEqual(layout, {
+    rows: { row1: [['u1'], ['u2']], row2: [['u3']] },
+    sizes: { row1: [12, 12], row2: [24] },
+    rowOrder: ['row1', 'row2'],
+  });
+  assert.throws(() => formGridLayout([[['missing', 24]]], {}), /no item for missing/);
 });

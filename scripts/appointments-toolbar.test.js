@@ -379,6 +379,16 @@ test('dropdown options load only id and label fields, never a whole customer rec
   assert.ok(!JSON.stringify(calls).includes('skinSensitivities'));
 });
 
+test('the sub-table pager fix is rendered with the toolbar and only affects tables inside forms', async () => {
+  const { view } = mount();
+  const styles = document.querySelectorAll('#appointments-subtable-pager-fix');
+  assert.equal(styles.length, 1);
+  const css = styles[0].textContent;
+  assert.match(css, /.ant-form .ant-form-item .ant-table-wrapper .ant-pagination/, 'scoped to tables inside a form');
+  assert.match(css, /position: static !important/, 'the inline absolute position must override');
+  view.unmount();
+});
+
 test('the toolbar removes its refresh listener when it unmounts', async () => {
   const { resource, view } = mount();
   await waitFor(() => assert.equal(resource.listenerCount('refresh'), 1), { timeout: 3000 });

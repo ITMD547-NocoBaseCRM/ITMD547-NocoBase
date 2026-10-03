@@ -12,7 +12,7 @@ Page: **Salon Management → Appointments** (`/admin/7rbhpfmdhv5`).
 | --- | --- |
 | Overview toolbar | JS block (`scripts/ui/appointments-toolbar.js`): All / Sessions / Events tabs, status KPI tiles, search, status/technician selects, date range, CSV export/import. Binds to the table dynamically. |
 | Appointments table | Native table block, 20 rows per page, newest date first. Columns: date, start, end, customer, phone, technician, category, status, services, notes. Filter, refresh, bulk delete. |
-| New appointment | Primary button opening a drawer with a create form: customer*, category*, booked services (inline sub-table: service, price, duration, notes), technician, date*, start*, end, status*, notes. |
+| New appointment | Primary button opening a drawer with a create form: customer*, category*, booked services (inline sub-table: service, price, duration, notes), technician, start*, end, status*, notes. The appointment date is not asked for: it is created from the start time (see below). |
 | View | Drawer with appointment details, an Edit action, and a booked-services table (own view/edit/delete). |
 | Edit | Drawer with the same form as create, bound to the current record. |
 | Delete | Row action with a confirmation dialog naming the appointment and its services; bulk delete also confirms. |
@@ -54,10 +54,23 @@ drawer. The data is US-01's, read through **Appointment → Customer → Skin se
 | Interaction | The pill is a real button. Click, tap, Enter or Space opens a panel with the list; Escape or a click outside closes it. Nothing needs hover. The button's accessible name already carries the full list ("Skin sensitivities recorded: Latex, Essential Oils. Press to show details."), so a screen reader does not need the panel. |
 | Wording | No record reads **"No sensitivities recorded"**, never "no sensitivities" or "no allergies": an empty profile means nothing was captured. If the role cannot see the customer's sensitivity fields the cell says "Sensitivity information not available" instead of claiming anything. Free text without the Other option ticked is still shown. |
 | Requests | None of its own. The table's single list request already appends the customer relation, so each row arrives with its customer: no per-row request (no N+1). The toolbar's dropdown options now load only `id` and name fields, so customer health data is not loaded into the browser for a dropdown. |
-| Authorisation | The customer reaches the browser only inside an appointment the user may read, so the appointment role scope decides. Verified with a real restricted staff account: it received only its assigned appointment (with that customer's sensitivities), another staff member's appointment returned nothing by id, filtering by another customer returned nothing, and the tab counts were scoped the same way. |
+| Authorisation | Through the appointments resource the appointment role scope decides. Verified with a real restricted staff account: it received only its assigned appointment (with that customer's sensitivities), another staff member's appointment returned nothing by id, filtering by another customer returned nothing, and the tab counts were scoped the same way. **This holds for the appointments resource only.** The T-46 tests found that the same appointments, and their customers' sensitivities, can be reached through related resources (staff, customers, services, booked services) because NocoBase does not apply an appointment scope to related records. See `docs/appointments-qa.md`. |
 
 The renderer is `scripts/ui/appointments-sensitivity.js` (a JS field renderer, two variants chosen when the
 blueprint is built) and its behaviour is covered by `scripts/appointments-sensitivity.test.js`.
+
+## The appointment date is created from the start time (T-46)
+
+The date used to be a second, free-text field next to the start time. It could disagree with the start time, a bad
+value was only caught by the database, and the create form lost the field altogether, which made it impossible to
+create an appointment. The database now sets `appointmentDate` itself (a trigger, see
+`scripts/migrations/20261003_derive_appointment_date.sql`) whenever `startTime` or the date is written, so the
+screens, the REST API and imports all agree. A date sent by a client is replaced by the derived one, and clearing it
+restores it. The table, the details drawer and the toolbar's date filter still use the column. `deriveAppointmentDate`
+in `scripts/appointments-schema.js` is the same rule in JavaScript, used by the import staging code.
+
+`yarn migrate:appointment-date`, restart NocoBase, then `yarn apply:appointments-ui --forms-only` removes the date
+from the live forms.
 
 ## Validation and states
 
@@ -97,8 +110,9 @@ so re-running it is safe; block uids change on each run.
 
 ## Known limitations (follow-ups)
 
-- The platform has no default date picker for the `dateOnly` interface, so "Appointment date" is a plain
-  text input (`YYYY-MM-DD`), consistent with the Customers page.
+- The appointment date is derived, so it is read-only everywhere. It is the calendar date of the start time in the salon
+  time zone (database setting `crm.salon_timezone`, default America/Chicago); an appointment that runs past midnight
+  keeps the date it started on.
 - All/Sessions/Events tabs (T-43), the skin-sensitivity warning column (T-44), role-specific
   review (T-45) and final mobile tuning (T-47) are not part of this task.
 - A second, older top-level "Appointments" page (`/admin/xw9v0lh863a`) still exists and was not touched.

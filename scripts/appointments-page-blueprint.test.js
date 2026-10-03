@@ -7,11 +7,12 @@ const {
   buildAppointmentsPageBlueprint,
   formFields,
   formLayout,
+  REMOVED_FORM_FIELDS,
   readSensitivityScript,
   readToolbarScript,
   toolbarTabs,
 } = require('./appointments-page-blueprint');
-const { CATEGORY_TABS, REQUIRED_FIELDS } = require('./appointments-schema');
+const { CATEGORY_TABS, DERIVED_FIELDS, REQUIRED_FIELDS } = require('./appointments-schema');
 
 const blueprint = buildAppointmentsPageBlueprint({ toolbarCode: '// toolbar' });
 const tab = blueprint.tabs[0];
@@ -186,4 +187,29 @@ test('the toolbar never fetches appointment rows just to filter them', () => {
   const rowFetches = listCalls.filter((call) => !call.includes('pageSize: 1'));
   assert.equal(rowFetches.length, 1, 'only the CSV export may request rows');
   assert.ok(rowFetches[0].includes('paginate: false') && rowFetches[0].includes('buildFilter(st)'));
+});
+
+test('forms do not ask for the derived appointment date, but the table and details still show it', () => {
+  assert.deepEqual(REMOVED_FORM_FIELDS, DERIVED_FIELDS);
+  const names = formFields().map(fieldName);
+  for (const derived of DERIVED_FIELDS) assert.ok(!names.includes(derived), `${derived} must not be a form field`);
+  const layoutKeys = formLayout()
+    .rows.flat()
+    .map((cell) => cell.key);
+  for (const derived of DERIVED_FIELDS) assert.ok(!layoutKeys.includes(derived));
+  // the start and end times now share a row
+  const timeRow = formLayout().rows.find((row) => row.some((cell) => cell.key === 'startTime'));
+  assert.deepEqual(timeRow, [
+    { key: 'startTime', span: 12 },
+    { key: 'endTime', span: 12 },
+  ]);
+  const columns = table.fields.map(fieldName);
+  assert.ok(columns.includes('appointmentDate'), 'the date is still a table column');
+  const view = table.recordActions.find((action) => action.type === 'view');
+  assert.ok(
+    view.popup.blocks
+      .find((block) => block.type === 'details')
+      .fields.map(fieldName)
+      .includes('appointmentDate'),
+  );
 });

@@ -17,5 +17,6 @@
     "experimentalDecorators": true,
     "downlevelIteration": true,
     "baseUrl": "."
-  }
+  },
+  "exclude": ["node_modules", "scripts/ui"]
 }

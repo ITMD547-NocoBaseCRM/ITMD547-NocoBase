@@ -99,6 +99,13 @@ function parseCSV(text) {
 }
 const csvCell = (v) => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 
+// NocoBase draws a sub-table's pager with position:absolute over the table footer, so in a narrow form (a phone, or a
+// drawer) "Total 1 items" and the page buttons print on top of "Add new" and "Select record". There is no setting for
+// it, so the toolbar renders a rule that lets the pager flow below the footer instead. It only applies to tables inside
+// a form. (Scripts may not write to the page directly, so the stylesheet is part of what the toolbar renders.)
+const PAGER_FIX_ID = 'appointments-subtable-pager-fix';
+const PAGER_FIX_CSS = '.ant-form .ant-form-item .ant-table-wrapper .ant-pagination { position: static !important; justify-content: flex-end; flex-wrap: wrap; margin: 8px 0 0 !important; }';
+
 function Toolbar() {
   const [meta, setMeta] = useState({ fields: {} });
   const [relOpts, setRelOpts] = useState({});
@@ -318,6 +325,6 @@ function Toolbar() {
   }
   const emptyRegion = h('div', { key: 'empty', role: 'status', 'aria-live': 'polite', style: emptyNote ? { marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fafafa', border: '1px dashed #d9d9d9', color: '#4b5563', fontSize: 13 } : undefined }, emptyNote);
 
-  return h('div', { style: { background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 } }, tabsNav, kpiRow, filters, emptyRegion, h('a', { key: 'dl', ref: dlRef, style: { display: 'none' } }));
+  return h('div', { style: { background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 } }, h('style', { key: 'pager-fix', id: PAGER_FIX_ID }, PAGER_FIX_CSS), tabsNav, kpiRow, filters, emptyRegion, h('a', { key: 'dl', ref: dlRef, style: { display: 'none' } }));
 }
 ctx.render(h(Toolbar));

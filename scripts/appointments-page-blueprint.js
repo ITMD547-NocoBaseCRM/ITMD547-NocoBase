@@ -20,7 +20,10 @@ const TOOLBAR_SCRIPT_PATH = path.join(__dirname, 'ui', 'appointments-toolbar.js'
 const SENSITIVITY_SCRIPT_PATH = path.join(__dirname, 'ui', 'appointments-sensitivity.js');
 
 // Fields the create/edit forms must mark required (DB NOT NULL columns from T-40).
-const REQUIRED_FORM_FIELDS = ['customer', 'category', 'appointmentDate', 'startTime', 'status'];
+const REQUIRED_FORM_FIELDS = ['customer', 'category', 'startTime', 'status'];
+
+// Form fields that were removed on purpose; `apply:appointments-ui --forms-only` removes them if they are still there.
+const REMOVED_FORM_FIELDS = ['appointmentDate'];
 
 const DELETE_CONFIRM = {
   enable: true,
@@ -28,6 +31,8 @@ const DELETE_CONFIRM = {
   content: 'This appointment and its booked services will be permanently deleted. Continue?',
 };
 
+// The appointment date is not on the forms: the database derives it from the start time (see
+// scripts/migrations/20261003_derive_appointment_date.sql), so it is shown read-only in the table and the details.
 // Form grid: [field key, column span] per row. The booked-services sub-table needs the full width;
 // in a half-width cell its price and duration columns are clipped.
 const FORM_LAYOUT_ROWS = [
@@ -40,9 +45,8 @@ const FORM_LAYOUT_ROWS = [
     ['status', 12],
   ],
   [
-    ['appointmentDate', 8],
-    ['startTime', 8],
-    ['endTime', 8],
+    ['startTime', 12],
+    ['endTime', 12],
   ],
   [['appointmentServices', 24]],
   [['notes', 24]],
@@ -64,7 +68,6 @@ function formFields() {
       },
     },
     { key: 'staff', field: 'staff', titleField: 'firstName' },
-    required('appointmentDate'),
     required('startTime'),
     { key: 'endTime', field: 'endTime' },
     required('status'),
@@ -291,7 +294,9 @@ function buildAppointmentsPageBlueprint({
 
 module.exports = {
   DELETE_CONFIRM,
+  FORM_LAYOUT_ROWS,
   PAGE_SCHEMA_UID,
+  REMOVED_FORM_FIELDS,
   REQUIRED_FORM_FIELDS,
   REQUIRED_FIELDS,
   SENSITIVITY_SCRIPT_PATH,

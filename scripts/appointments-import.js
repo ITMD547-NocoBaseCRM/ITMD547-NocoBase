@@ -11,7 +11,7 @@
 //     customerExternalId | customerEmail | customerPhone,
 //     technicianExternalId | technicianEmail,
 //     serviceExternalIds: [] | serviceNames: [],
-//     category, appointmentDate, startTime, endTime, status, notes,
+//     category, startTime, endTime, status, notes,   (appointmentDate is derived from startTime)
 //   }
 
 const { validateAppointment } = require('./appointments-schema');
@@ -161,7 +161,8 @@ function stageRecord(record, lookups, seenInBatch) {
       serviceIds: services.ids,
       category: validation.record.category,
       status: validation.record.status,
-      appointmentDate: record.appointmentDate,
+      // derived from the start time, exactly as the database does for every saved appointment
+      appointmentDate: validation.record.appointmentDate,
       startTime: record.startTime,
       endTime: isBlank(record.endTime) ? null : record.endTime,
       notes: isBlank(record.notes) ? null : String(record.notes),

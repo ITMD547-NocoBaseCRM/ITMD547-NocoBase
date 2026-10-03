@@ -83,6 +83,35 @@ async function main() {
       expect(indexNames.includes(name), `index ${name} is missing`);
     }
 
+    // Database-side rules added after T-40: reference integrity, detach-deletes-line and the derived date.
+    const triggers = await client.query(
+      `select tgname from pg_trigger where not tgisinternal and tgrelid in ('"appointments"'::regclass, '"appointmentServices"'::regclass, '"customers"'::regclass, '"services"'::regclass)`,
+    );
+    const triggerNames = triggers.rows.map((row) => row.tgname);
+    for (const name of [
+      'appointments_derive_date',
+      'appointments_check_times',
+      'appointment_services_detach',
+      'customers_refuse_delete_with_appointments',
+      'services_refuse_delete_when_booked',
+    ]) {
+      expect(triggerNames.includes(name), `trigger ${name} is missing`);
+    }
+    const foreignKeys = await client.query(
+      `select conname from pg_constraint where contype = 'f' and conrelid in ('"appointments"'::regclass, '"appointmentServices"'::regclass)`,
+    );
+    for (const name of [
+      'appointments_customer_fk',
+      'appointments_staff_fk',
+      'appointment_services_service_fk',
+      'appointment_services_appointment_fk',
+    ]) {
+      expect(
+        foreignKeys.rows.some((row) => row.conname === name),
+        `foreign key ${name} is missing`,
+      );
+    }
+
     const fields = await client.query(
       `select name, type, interface, options from "fields" where "collectionName" = 'appointments'`,
     );
@@ -100,7 +129,8 @@ async function main() {
       sameOptions(field.status.options.enum, APPOINTMENT_STATUSES),
       'appointments.status enum differs from appointments-schema.js',
     );
-    for (const name of ['customer', 'appointmentDate', 'startTime', 'status', 'category']) {
+    // the date is NOT NULL in the database but derived from the start time, so it is not required of a person
+    for (const name of ['customer', 'startTime', 'status', 'category']) {
       expect(field[name].options.uiSchema.required === true, `appointments.${name} must be marked required`);
     }
     for (const [name, target, fk] of [

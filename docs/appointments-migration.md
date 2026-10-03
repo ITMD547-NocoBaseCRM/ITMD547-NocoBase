@@ -45,7 +45,7 @@ The `appointments` collection is configured by T-40 and prepared by this task.
 | `customerId` | yes | Resolved from the source customer key |
 | `staffId` | no | Resolved technician; NULL when unassigned |
 | `category` | yes | `session` or `event`; default `session` |
-| `appointmentDate` | yes | Date of the appointment |
+| `appointmentDate` | derived | Set by the database from `startTime` (salon time zone); do not supply it |
 | `startTime` | yes | Timestamp with time zone |
 | `endTime` | no | Must be after `startTime` when present |
 | `status` | yes | `scheduled`, `confirmed`, `inProgress`, `completed`, `cancelled`, `noShow` |
@@ -63,7 +63,7 @@ constraint `appointments_external_identity_pair` requires them to be set togethe
 | Customer | `customerId` | Source customer id → `customers` external key; email, then phone, only when no stable id exists and the match is unambiguous |
 | Type / category | `category` | Explicit value map supplied by the business; unknown values fail the row |
 | Service(s) | `appointmentServices` | Source service id → `services`; name only as a last resort |
-| Date | `appointmentDate` | Derived from the source start time in the salon's time zone |
+| Date | `appointmentDate` | Not mapped: the database derives it from the start time |
 | Start / end | `startTime`, `endTime` | Converted to UTC; end must be after start |
 | Technician | `staffId` | Source employee id → `staff`; missing technician is allowed, unknown technician fails the row |
 | Status | `status` | Explicit value map; unknown values fail the row |

@@ -4,6 +4,7 @@
 
 const {
   PAGE_SCHEMA_UID,
+  REMOVED_FORM_FIELDS,
   REQUIRED_FORM_FIELDS,
   readSensitivityScript,
   readToolbarScript,
@@ -155,6 +156,10 @@ async function main() {
     const paths = items.map(fieldPathOf);
     for (const field of [...REQUIRED_FORM_FIELDS, 'staff', 'endTime', 'notes', 'appointmentServices']) {
       expect(paths.includes(field), `${name} form is missing field ${field}`);
+    }
+    // fields removed on purpose (the date is derived from the start time) must not come back
+    for (const field of REMOVED_FORM_FIELDS) {
+      expect(!paths.includes(field), `${name} form asks for ${field}, which is derived from the start time`);
     }
     for (const field of REQUIRED_FORM_FIELDS) {
       const item = items.find((node) => fieldPathOf(node) === field);

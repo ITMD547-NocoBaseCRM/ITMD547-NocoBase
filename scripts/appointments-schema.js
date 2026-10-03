@@ -26,7 +26,24 @@ const CATEGORY_TABS = [
   { key: 'events', label: 'Events', category: 'event' },
 ];
 
-const REQUIRED_FIELDS = ['customerId', 'appointmentDate', 'startTime', 'status', 'category'];
+// What a person (or an import) must supply. appointmentDate is not among them: it is derived from startTime.
+const REQUIRED_FIELDS = ['customerId', 'startTime', 'status', 'category'];
+
+// Columns the database fills in itself; forms and imports must not ask for them.
+const DERIVED_FIELDS = ['appointmentDate'];
+
+// The salon's time zone, used to turn a start time into a calendar date. The database trigger reads the same default
+// (and the database setting crm.salon_timezone, see scripts/migrations/20261003_derive_appointment_date.sql).
+const DEFAULT_SALON_TIMEZONE = 'America/Chicago';
+
+// The appointment's calendar date: the date of its start time in the salon's time zone, as YYYY-MM-DD.
+// An appointment that runs past midnight keeps the date it started on. Returns null for a missing or invalid start.
+function deriveAppointmentDate(startTime, timeZone = DEFAULT_SALON_TIMEZONE) {
+  if (startTime === undefined || startTime === null || startTime === '') return null;
+  const date = startTime instanceof Date ? startTime : new Date(startTime);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
 
 function isAppointmentCategory(value) {
   return APPOINTMENT_CATEGORIES.some((item) => item.value === value);
@@ -71,6 +88,9 @@ function validateAppointment(input = {}) {
   if (start !== null && end !== null && !Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
     errors.push('endTime must be after startTime');
   }
+  // The date always follows the start time, whatever was supplied.
+  const derivedDate = deriveAppointmentDate(record.startTime);
+  if (derivedDate) record.appointmentDate = derivedDate;
   return { valid: errors.length === 0, errors, record };
 }
 
@@ -79,8 +99,11 @@ module.exports = {
   APPOINTMENT_STATUSES,
   CATEGORY_TABS,
   DEFAULT_CATEGORY,
+  DEFAULT_SALON_TIMEZONE,
   DEFAULT_STATUS,
+  DERIVED_FIELDS,
   REQUIRED_FIELDS,
+  deriveAppointmentDate,
   getCategoryFilter,
   isAppointmentCategory,
   isAppointmentStatus,
