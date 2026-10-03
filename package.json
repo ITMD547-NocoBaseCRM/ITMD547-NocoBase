@@ -23,7 +23,10 @@
     "lint": "eslint .",
     "migrate:appointments-collection": "node scripts/run-appointments-collection-migration.js",
     "validate:appointments-collection": "node scripts/validate-appointments-collection.js",
-    "test:appointments-collection": "node --test scripts/appointments-schema.test.js"
+    "test:appointments-collection": "node --test scripts/appointments-schema.test.js",
+    "migrate:appointments-migration-prep": "node scripts/run-appointments-migration-prep.js",
+    "validate:appointments-migration-prep": "node scripts/validate-appointments-migration-prep.js",
+    "test:appointments-import": "node --test scripts/appointments-import.test.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",
