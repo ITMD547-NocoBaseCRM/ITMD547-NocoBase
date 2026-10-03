@@ -34,7 +34,8 @@ Page: **Salon Management → Appointments** (`/admin/7rbhpfmdhv5`).
 ```bash
 yarn migrate:appointments-ui-labels        # readable titleField / relation labels (restart app after)
 yarn migrate:appointment-services-cascade  # cascade delete of booked-service lines (restart app after)
-yarn apply:appointments-ui                 # (re)author the page through flowSurfaces:applyBlueprint
+yarn apply:appointments-ui                 # (re)author the page through flowSurfaces:applyBlueprint, then stack blocks
+yarn apply:appointments-ui --layout-only   # only re-stack the live page blocks (seconds, safe to repeat)
 yarn validate:appointments-ui              # read the page back and assert the CRUD structure
 yarn test:appointments-ui                  # unit tests for the blueprint builder
 ```
@@ -44,10 +45,19 @@ yarn test:appointments-ui                  # unit tests for the blueprint builde
 several minutes because the server materialises every popup. It is a `replace` of the existing page,
 so re-running it is safe; block uids change on each run.
 
+## Layout
+
+- The authoring validator rejects a one-block-per-row layout, so the blueprint writes the toolbar and
+  table (and the details and booked services in the View drawer) side by side. The apply script then
+  stacks them with `flowSurfaces:setLayout` (`scripts/appointments-page-layout.js`), and
+  `validate:appointments-ui` fails if they are not stacked one per row at full width.
+- The create and edit forms use an explicit field layout so the booked-services sub-table gets a full-width
+  row; in a half-width cell its price and duration columns were clipped.
+
 ## Known limitations (follow-ups)
 
-- Date-only fields are rendered with the platform's default input for the `dateOnly` interface,
-  consistent with the Customers page.
+- The platform has no default date picker for the `dateOnly` interface, so "Appointment date" is a plain
+  text input (`YYYY-MM-DD`), consistent with the Customers page.
 - All/Sessions/Events tabs (T-43), the skin-sensitivity warning column (T-44), role-specific
   review (T-45) and final mobile tuning (T-47) are not part of this task.
 - A second, older top-level "Appointments" page (`/admin/xw9v0lh863a`) still exists and was not touched.

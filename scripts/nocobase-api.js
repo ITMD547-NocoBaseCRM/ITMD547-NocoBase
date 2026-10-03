@@ -82,10 +82,20 @@ async function createClient(options = {}) {
   return { baseUrl, request };
 }
 
+// Reads one flow surface (a page by pageSchemaUid, or any block/action/popup by uid) and returns its tree.
+async function getSurface(client, locator) {
+  const query = Object.entries(locator)
+    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
+    .join('&');
+  const result = await client.request(`flowSurfaces:get?${query}`);
+  if (!result.ok) throw new Error(`flowSurfaces:get ${JSON.stringify(locator)} failed: ${formatErrors(result.json)}`);
+  return result.json.data.tree;
+}
+
 function formatErrors(json) {
   const errors = json?.errors || json?.data?.errors;
   if (!Array.isArray(errors)) return JSON.stringify(json).slice(0, 500);
   return errors.map((error) => `${error.ruleId || error.code || 'error'}: ${error.message}`).join('\n');
 }
 
-module.exports = { createClient, formatErrors, loadEnv, resolveBaseUrl };
+module.exports = { createClient, formatErrors, getSurface, loadEnv, resolveBaseUrl };

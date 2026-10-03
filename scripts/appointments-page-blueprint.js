@@ -6,6 +6,10 @@
 //
 // Kept as a pure builder so it can be unit-tested and re-applied to any environment with
 // `yarn apply:appointments-ui`.
+//
+// Note: the blueprint authors the toolbar and the table side by side because the authoring validator
+// rejects a one-block-per-row layout. `apply-appointments-ui.js` stacks them afterwards with
+// `flowSurfaces:setLayout` (see appointments-page-layout.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -23,12 +27,33 @@ const DELETE_CONFIRM = {
   content: 'This appointment and its booked services will be permanently deleted. Continue?',
 };
 
+// Form grid: [field key, column span] per row. The booked-services sub-table needs the full width;
+// in a half-width cell its price and duration columns are clipped.
+const FORM_LAYOUT_ROWS = [
+  [
+    ['customer', 12],
+    ['category', 12],
+  ],
+  [
+    ['staff', 12],
+    ['status', 12],
+  ],
+  [
+    ['appointmentDate', 8],
+    ['startTime', 8],
+    ['endTime', 8],
+  ],
+  [['appointmentServices', 24]],
+  [['notes', 24]],
+];
+
 function formFields() {
-  const required = (field, extra = {}) => ({ field, settings: { required: true }, ...extra });
+  const required = (field, extra = {}) => ({ key: field, field, settings: { required: true }, ...extra });
   return [
     required('customer', { titleField: 'firstName' }),
     required('category'),
     {
+      key: 'appointmentServices',
       field: 'appointmentServices',
       titleField: 'priceAtBooking',
       settings: {
@@ -37,13 +62,17 @@ function formFields() {
         fields: ['service', 'priceAtBooking', 'durationAtBooking', 'notes'],
       },
     },
-    { field: 'staff', titleField: 'firstName' },
+    { key: 'staff', field: 'staff', titleField: 'firstName' },
     required('appointmentDate'),
     required('startTime'),
-    'endTime',
+    { key: 'endTime', field: 'endTime' },
     required('status'),
-    'notes',
+    { key: 'notes', field: 'notes' },
   ];
+}
+
+function formLayout() {
+  return { rows: FORM_LAYOUT_ROWS.map((row) => row.map(([key, span]) => ({ key, span }))) };
 }
 
 function bookedServicesTable(title) {
@@ -66,7 +95,7 @@ function editPopup(key) {
   return {
     title: 'Edit appointment',
     tryTemplate: false,
-    blocks: [{ key, type: 'editForm', fields: formFields(), actions: ['submit'] }],
+    blocks: [{ key, type: 'editForm', fields: formFields(), fieldsLayout: formLayout(), actions: ['submit'] }],
   };
 }
 
@@ -152,6 +181,7 @@ function buildAppointmentsPageBlueprint({ pageSchemaUid = PAGE_SCHEMA_UID, toolb
                       type: 'createForm',
                       collection: 'appointments',
                       fields: formFields(),
+                      fieldsLayout: formLayout(),
                       actions: ['submit'],
                     },
                   ],
@@ -219,5 +249,6 @@ module.exports = {
   TOOLBAR_SCRIPT_PATH,
   buildAppointmentsPageBlueprint,
   formFields,
+  formLayout,
   readToolbarScript,
 };

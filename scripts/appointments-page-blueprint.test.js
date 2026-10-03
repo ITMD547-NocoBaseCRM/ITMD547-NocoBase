@@ -6,6 +6,7 @@ const {
   REQUIRED_FORM_FIELDS,
   buildAppointmentsPageBlueprint,
   formFields,
+  formLayout,
   readToolbarScript,
 } = require('./appointments-page-blueprint');
 const { REQUIRED_FIELDS } = require('./appointments-schema');
@@ -71,6 +72,32 @@ test('forms require exactly the NOT NULL columns and expose every supported fiel
   const services = fields.find((entry) => fieldName(entry) === 'appointmentServices');
   assert.equal(services.settings.fieldType, 'subTable');
   assert.ok(services.settings.fields.includes('service'));
+});
+
+test('form layout places every field once and gives the services sub-table the full width', () => {
+  const layout = formLayout();
+  const placed = layout.rows.flat().map((cell) => cell.key);
+  assert.deepEqual(
+    placed.sort(),
+    formFields()
+      .map((entry) => entry.key)
+      .sort(),
+  );
+  assert.equal(new Set(placed).size, placed.length, 'a field is placed twice');
+  for (const row of layout.rows) {
+    assert.equal(
+      row.reduce((sum, cell) => sum + cell.span, 0),
+      24,
+      'row spans must add up to 24',
+    );
+  }
+  const servicesRow = layout.rows.find((row) => row.some((cell) => cell.key === 'appointmentServices'));
+  assert.deepEqual(servicesRow, [{ key: 'appointmentServices', span: 24 }]);
+
+  const addNew = table.actions.find((action) => action.type === 'addNew');
+  assert.deepEqual(addNew.popup.blocks[0].fieldsLayout, layout);
+  const edit = table.recordActions.find((action) => action.type === 'edit');
+  assert.deepEqual(edit.popup.blocks[0].fieldsLayout, layout);
 });
 
 test('toolbar script is embedded as a page asset and binds the table dynamically', () => {

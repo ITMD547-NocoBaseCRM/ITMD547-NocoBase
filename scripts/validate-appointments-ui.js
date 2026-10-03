@@ -3,7 +3,14 @@
 // Usage: yarn validate:appointments-ui [--page-schema-uid <uid>]
 
 const { PAGE_SCHEMA_UID, REQUIRED_FORM_FIELDS } = require('./appointments-page-blueprint');
-const { createClient, formatErrors } = require('./nocobase-api');
+const {
+  findDetailsLayoutTarget,
+  findNode,
+  findPageLayoutTarget,
+  isFullWidthRow,
+  isStacked,
+} = require('./appointments-page-layout');
+const { createClient, getSurface } = require('./nocobase-api');
 
 function readArg(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -33,19 +40,21 @@ const collectionOf = (node) =>
   node.stepParams?.resourceSettings?.init?.collectionName || node.stepParams?.resourceSettings?.init?.associationName;
 const titleOf = (node) => String(node.stepParams?.buttonSettings?.general?.title ?? node.props?.title ?? '');
 
-async function readSurface(client, locator) {
-  const query = Object.entries(locator)
-    .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
-    .join('&');
-  const result = await client.request(`flowSurfaces:get?${query}`);
-  if (!result.ok) throw new Error(`flowSurfaces:get ${JSON.stringify(locator)} failed: ${formatErrors(result.json)}`);
-  return result.json.data.tree;
+const readSurface = getSurface;
+
+// Asserts that the grid holding `order` (found by `locate`) shows one full-width block per row.
+function expectStacked(tree, locate, label) {
+  const target = locate(tree);
+  expect(target, `${label}: the blocks to stack were not found`);
+  const grid = findNode(tree, (node) => node.uid === target.gridUid);
+  expect(isStacked(grid, target.order), `${label}: blocks are not stacked one per row at full width`);
 }
 
 async function main() {
   const pageSchemaUid = readArg('--page-schema-uid', PAGE_SCHEMA_UID);
   const client = await createClient();
   const page = await readSurface(client, { pageSchemaUid });
+  expectStacked(page, findPageLayoutTarget, 'page');
   const nodes = collect(page);
 
   const table = nodes.find((node) => node.use === 'TableBlockModel' && collectionOf(node) === 'appointments');
@@ -126,8 +135,16 @@ async function main() {
       forms[name].popupNodes.some((node) => node.use === 'FormSubmitActionModel'),
       `${name} form has no submit action`,
     );
+    // The booked-services sub-table is clipped in a half-width cell; it must own a full-width row.
+    const formGrid = forms[name].popupNodes.find((node) => node.use === 'FormGridModel');
+    const servicesItem = items.find((node) => fieldPathOf(node) === 'appointmentServices');
+    expect(
+      formGrid && isFullWidthRow(formGrid, servicesItem.uid),
+      `${name} form: booked services do not have a full-width row`,
+    );
   }
 
+  expectStacked(forms.view.popupNodes[0], findDetailsLayoutTarget, 'view popup');
   const viewNodes = forms.view.popupNodes;
   expect(
     viewNodes.some((node) => node.use === 'TableBlockModel' && collectionOf(node) === 'appointmentServices'),
