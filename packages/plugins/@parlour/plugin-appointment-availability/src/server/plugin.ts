@@ -2,7 +2,11 @@ import { Plugin } from '@nocobase/server';
 import { AvailabilityError, AvailabilityService } from './availability-service';
 
 export class PluginAppointmentAvailabilityServer extends Plugin {
-  private availability = new AvailabilityService(this.db);
+  private get availability() {
+    // Plugin fields are initialized before NocoBase assigns the database handle.
+    // Resolve it at request/lifecycle time instead of retaining an undefined handle.
+    return new AvailabilityService(this.db);
+  }
 
   async beforeLoad() {
     this.db.on('appointments.beforeCreate', async (model: any) => this.validateAppointment(model));
