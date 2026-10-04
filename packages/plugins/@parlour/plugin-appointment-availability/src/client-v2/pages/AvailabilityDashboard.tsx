@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useFlowContext } from '@nocobase/flow-engine';
 import { useT } from '../locale';
@@ -48,11 +48,20 @@ export default function AvailabilityDashboard() {
     const values = await form.validateFields();
     const resource = editor === 'schedule' ? 'staffAvailabilitySchedules' : editor === 'override' ? 'staffAvailabilityOverrides' : 'staffAvailabilityLeaves';
     const payload: RecordItem = { ...values };
-    if (editor === 'schedule') { payload.weekday = Number(values.weekday); payload.effectiveFrom = values.effectiveFrom.format('YYYY-MM-DD'); payload.effectiveTo = values.effectiveTo?.format('YYYY-MM-DD'); payload.periods = toPeriods(values); }
+    if (editor === 'schedule') { payload.effectiveFrom = values.effectiveFrom.format('YYYY-MM-DD'); payload.effectiveTo = values.effectiveTo?.format('YYYY-MM-DD'); payload.periods = toPeriods(values); }
     if (editor === 'override') { payload.date = values.date.format('YYYY-MM-DD'); payload.periods = values.isWorking ? toPeriods(values) : []; }
     if (editor === 'leave') { payload.startTime = values.range[0].toISOString(); payload.endTime = values.range[1].toISOString(); delete payload.range; }
     setSaving(true);
-    try { await ctx.api.request({ url: `${resource}:create`, method: 'post', data: payload }); ctx.message.success(t('Saved successfully')); setEditor(null); await load(); }
+    try {
+      if (editor === 'schedule') {
+        const weekdays = values.weekdays as number[];
+        delete payload.weekdays;
+        await Promise.all(weekdays.map((weekday) => ctx.api.request({ url: `${resource}:create`, method: 'post', data: { ...payload, weekday } })));
+      } else {
+        await ctx.api.request({ url: `${resource}:create`, method: 'post', data: payload });
+      }
+      ctx.message.success(t('Saved successfully')); setEditor(null); await load();
+    }
     catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
   };
   const remove = async (resource: string, id: any) => { try { await ctx.api.request({ url: `${resource}:destroy`, method: 'post', data: { filterByTk: id } }); await load(); } catch (requestError) { ctx.message.error(errorMessage(requestError)); } };
@@ -93,7 +102,7 @@ export default function AvailabilityDashboard() {
     <Drawer title={editor === 'schedule' ? t('Recurring schedule') : editor === 'override' ? t('Date override') : t('Staff leave')} open={!!editor} onClose={() => setEditor(null)} width={480} footer={<Space><Button onClick={() => setEditor(null)}>{t('Cancel')}</Button><Button type="primary" loading={saving} onClick={save}>{t('Save')}</Button></Space>}>
       <Form form={form} layout="vertical">
         <Form.Item name="staffId" label={t('Staff')} rules={[{ required: true }]}><Select options={staffOptions} showSearch optionFilterProp="label" /></Form.Item>
-        {editor === 'schedule' && <><Form.Item name="weekday" label={t('Day')} rules={[{ required: true }]}><Select options={weekdays.map((label, value) => ({ label, value }))} /></Form.Item><Row gutter={12}><Col span={12}><Form.Item name="effectiveFrom" label={t('Effective from')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col><Col span={12}><Form.Item name="effectiveTo" label={t('Effective to')}><DatePicker style={{ width: '100%' }} /></Form.Item></Col></Row></>}
+        {editor === 'schedule' && <><Form.Item name="weekdays" label={t('Days')} rules={[{ required: true, type: 'array', min: 1 }]}><Checkbox.Group options={weekdays.map((label, value) => ({ label, value }))} style={{ display: 'flex', flexDirection: 'column', gap: 8 }} /></Form.Item><Row gutter={12}><Col span={12}><Form.Item name="effectiveFrom" label={t('Effective from')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col><Col span={12}><Form.Item name="effectiveTo" label={t('Effective to')}><DatePicker style={{ width: '100%' }} /></Form.Item></Col></Row></>}
         {editor === 'override' && <Form.Item name="date" label={t('Date')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>}
         {editor !== 'leave' && <><Form.Item name="isWorking" label={t('Working')} rules={[{ required: true }]}><Select options={[{ value: true, label: t('Available') }, { value: false, label: t('Day off') }]} /></Form.Item><Form.List name="periods">{(fields, { add, remove }) => <>{fields.map((field) => <Row gutter={8} key={field.key}><Col span={10}><Form.Item {...field} name={[field.name, 'start']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={10}><Form.Item {...field} name={[field.name, 'end']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={4}><Button onClick={() => remove(field.name)} aria-label={t('Remove period')}>×</Button></Col></Row>)}<Button onClick={() => add()}>{t('Add period')}</Button></>}</Form.List></>}
         {editor === 'leave' && <Form.Item name="range" label={t('Leave period')} rules={[{ required: true }]}><DatePicker.RangePicker showTime style={{ width: '100%' }} /></Form.Item>}
