@@ -15,6 +15,12 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     this.db.on('staffAvailabilityLeaves.beforeUpdate', async (model: any) => this.validateLeave(model));
     this.db.on('staffAvailabilityOverrides.beforeCreate', async (model: any) => this.validateOverride(model));
     this.db.on('staffAvailabilityOverrides.beforeUpdate', async (model: any) => this.validateOverride(model));
+    this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any) => this.availability.projectScheduleToEmployeeShifts(model));
+    this.db.on('staffAvailabilitySchedules.afterUpdate', async (model: any) => {
+      await this.availability.clearScheduleProjection(model);
+      await this.availability.projectScheduleToEmployeeShifts(model);
+    });
+    this.db.on('staffAvailabilitySchedules.afterDestroy', async (model: any) => this.availability.clearScheduleProjection(model));
   }
 
   async load() {
@@ -51,6 +57,10 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
   async install() {
     const repo = this.db.getRepository('appointmentAvailabilitySettings');
     if (!await repo.findOne({})) await repo.create({ values: { timeZone: 'America/Chicago', slotIntervalMinutes: 15, defaultDurationMinutes: 60 } });
+  }
+
+  async afterEnable() {
+    await this.availability.projectExistingSchedules();
   }
 
   private async validateAppointment(model: any) {

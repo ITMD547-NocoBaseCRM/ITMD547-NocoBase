@@ -53,6 +53,17 @@ function asPeriods(value: unknown): Period[] {
   return value.filter((item: any) => item && /^\d{2}:\d{2}$/.test(item.start) && /^\d{2}:\d{2}$/.test(item.end) && item.start < item.end);
 }
 
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function dateOnlyValue(value: unknown) {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return typeof value === 'string' ? value.slice(0, 10) : '';
+}
+
 export class AvailabilityError extends Error {
   constructor(message: string) {
     super(message);
@@ -150,6 +161,59 @@ export class AvailabilityService {
       }
     }
     return { date: input.date, timeZone: working.settings.timeZone, source: working.source, slots };
+  }
+
+  async projectScheduleToEmployeeShifts(input: unknown) {
+    const schedule = plain(input);
+    const effectiveFrom = dateOnlyValue(schedule?.effectiveFrom);
+    const effectiveTo = dateOnlyValue(schedule?.effectiveTo);
+    if (!schedule?.id || !schedule.staffId || !effectiveFrom || !schedule.isWorking) return 0;
+
+    const marker = `[Availability schedule ${schedule.id}]`;
+    const shifts = this.db.getRepository('employeeShifts');
+    const existing = await shifts.find({ filter: { notes: { $includes: marker } }, fields: ['id'], limit: 1 });
+    if (existing.length) return 0;
+
+    const settings = await this.settings();
+    const today = localDate(new Date(), settings.timeZone);
+    const firstDate = effectiveFrom > today ? effectiveFrom : today;
+    const horizon = addDays(today, 89);
+    const lastDate = effectiveTo && effectiveTo < horizon ? effectiveTo : horizon;
+    if (lastDate < firstDate) return 0;
+
+    const records: Array<Record<string, unknown>> = [];
+    const periods = asPeriods(schedule.periods);
+    for (let date = firstDate; date <= lastDate; date = addDays(date, 1)) {
+      if (weekday(date, settings.timeZone) !== Number(schedule.weekday)) continue;
+      for (const period of periods) {
+        const startTime = atBusinessTime(date, period.start, settings.timeZone);
+        const endTime = atBusinessTime(date, period.end, settings.timeZone);
+        records.push({
+          staffId: schedule.staffId,
+          shiftDate: date,
+          startTime,
+          endTime,
+          shiftType: 'availability',
+          status: 'scheduled',
+          calendarTitle: 'Available',
+          notes: `${marker}${schedule.notes ? ` ${schedule.notes}` : ''}`,
+        });
+      }
+    }
+    if (!records.length) return 0;
+    await shifts.createMany({ records });
+    return records.length;
+  }
+
+  async clearScheduleProjection(input: unknown) {
+    const schedule = plain(input);
+    if (!schedule?.id) return;
+    await this.db.getRepository('employeeShifts').destroy({ filter: { notes: { $includes: `[Availability schedule ${schedule.id}]` } } });
+  }
+
+  async projectExistingSchedules() {
+    const schedules = await this.db.getRepository('staffAvailabilitySchedules').find({ filter: { isWorking: true } });
+    for (const schedule of schedules) await this.projectScheduleToEmployeeShifts(schedule);
   }
 
   async assertNoAppointmentsWouldBeInvalidated(staffId: number | string, start: Date, end: Date, ignoreAppointmentId?: number | string) {
