@@ -13,9 +13,19 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     this.db.on('appointments.beforeUpdate', async (model: any) => this.validateAppointment(model));
     this.db.on('staffAvailabilityLeaves.beforeCreate', async (model: any) => this.validateLeave(model));
     this.db.on('staffAvailabilityLeaves.beforeUpdate', async (model: any) => this.validateLeave(model));
+    this.db.on('staffAvailabilityLeaves.afterCreate', async (model: any) => this.availability.applyLeaveToEmployeeShifts(model));
+    this.db.on('staffAvailabilityLeaves.afterUpdate', async (model: any) => {
+      await this.availability.clearLeaveProjection(model);
+      await this.availability.applyLeaveToEmployeeShifts(model);
+    });
+    this.db.on('staffAvailabilityLeaves.afterDestroy', async (model: any) => this.availability.clearLeaveProjection(model));
     this.db.on('staffAvailabilityOverrides.beforeCreate', async (model: any) => this.validateOverride(model));
     this.db.on('staffAvailabilityOverrides.beforeUpdate', async (model: any) => this.validateOverride(model));
-    this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any) => this.availability.projectScheduleToEmployeeShifts(model));
+    this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any) => {
+      await this.availability.projectScheduleToEmployeeShifts(model);
+      const values = model.get ? model.get() : model;
+      await this.availability.applyExistingLeaves(values.staffId);
+    });
     this.db.on('staffAvailabilitySchedules.afterUpdate', async (model: any) => {
       await this.availability.clearScheduleProjection(model);
       await this.availability.projectScheduleToEmployeeShifts(model);
@@ -61,6 +71,7 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
 
   async afterEnable() {
     await this.availability.projectExistingSchedules();
+    await this.availability.applyExistingLeaves();
   }
 
   private async validateAppointment(model: any) {
