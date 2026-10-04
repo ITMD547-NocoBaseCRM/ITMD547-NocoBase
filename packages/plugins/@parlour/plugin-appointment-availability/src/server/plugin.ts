@@ -21,10 +21,20 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     this.db.on('staffAvailabilityLeaves.afterDestroy', async (model: any) => this.availability.clearLeaveProjection(model));
     this.db.on('staffAvailabilityOverrides.beforeCreate', async (model: any) => this.validateOverride(model));
     this.db.on('staffAvailabilityOverrides.beforeUpdate', async (model: any) => this.validateOverride(model));
-    this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any) => {
-      await this.availability.projectScheduleToEmployeeShifts(model);
+    this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any, options: any) => {
+      // Run after the insert commits: querying on a second pooled connection
+      // while the create transaction still holds one exhausts the pool.
       const values = model.get ? model.get() : model;
-      await this.availability.applyExistingLeaves(values.staffId);
+      const project = async () => {
+        try {
+          await this.availability.projectScheduleToEmployeeShifts(model);
+          await this.availability.applyExistingLeaves(values.staffId);
+        } catch (error) {
+          this.app.logger.error(error);
+        }
+      };
+      if (options?.transaction?.afterCommit) options.transaction.afterCommit(project);
+      else await project();
     });
     this.db.on('staffAvailabilitySchedules.afterUpdate', async (model: any) => {
       await this.availability.clearScheduleProjection(model);

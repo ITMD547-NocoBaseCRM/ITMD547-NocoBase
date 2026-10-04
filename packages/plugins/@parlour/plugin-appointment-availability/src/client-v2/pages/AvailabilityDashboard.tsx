@@ -56,7 +56,7 @@ export default function AvailabilityDashboard() {
       if (editor === 'schedule') {
         const weekdays = values.weekdays as number[];
         delete payload.weekdays;
-        await Promise.all(weekdays.map((weekday) => ctx.api.request({ url: `${resource}:create`, method: 'post', data: { ...payload, weekday } })));
+        for (const weekday of weekdays) await ctx.api.request({ url: `${resource}:create`, method: 'post', data: { ...payload, weekday } });
       } else {
         await ctx.api.request({ url: `${resource}:create`, method: 'post', data: payload });
       }
