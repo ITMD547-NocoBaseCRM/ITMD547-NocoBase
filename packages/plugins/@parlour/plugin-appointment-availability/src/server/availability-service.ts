@@ -228,6 +228,8 @@ export class AvailabilityService {
     if (!leave?.id || !leave.staffId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return 0;
 
     const marker = `[Availability leave ${leave.id}]`;
+    const staffName = await this.staffDisplayName(leave.staffId);
+    const calendarTitle = `On leave — ${staffName}`;
     const shifts = this.db.getRepository('employeeShifts');
     const generatedShifts = await shifts.find({
       filter: {
@@ -244,12 +246,17 @@ export class AvailabilityService {
     for (const record of generatedShifts) {
       const shift = plain(record);
       const notes = typeof shift.notes === 'string' ? shift.notes : '';
-      if (notes.includes(marker)) continue;
+      if (notes.includes(marker)) {
+        if (shift.calendarTitle === calendarTitle) continue;
+        await shifts.update({ filterByTk: shift.id, values: { calendarTitle } });
+        updated += 1;
+        continue;
+      }
       await shifts.update({
         filterByTk: shift.id,
         values: {
           status: 'onLeave',
-          calendarTitle: 'On leave',
+          calendarTitle,
           notes: `${notes}${notes ? ' ' : ''}${marker}`,
         },
       });
@@ -288,6 +295,20 @@ export class AvailabilityService {
       ...(staffId ? { filter: { staffId } } : {}),
     });
     for (const leave of leaves) await this.applyLeaveToEmployeeShifts(leave);
+  }
+
+  private async staffDisplayName(staffId: number | string) {
+    const staff = await this.db.getRepository('staff').find({
+      filter: { id: staffId },
+      fields: ['firstName', 'lastName'],
+      limit: 1,
+    });
+    const record = plain(staff[0]);
+    const name = [record?.firstName, record?.lastName]
+      .filter((part) => typeof part === 'string' && part.trim())
+      .join(' ')
+      .trim();
+    return name || 'Staff member';
   }
 
   async assertNoAppointmentsWouldBeInvalidated(staffId: number | string, start: Date, end: Date, ignoreAppointmentId?: number | string) {
