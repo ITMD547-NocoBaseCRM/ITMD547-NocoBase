@@ -1,4 +1,11 @@
-// This plugin is implemented exclusively for NocoBase's modern /v/ client.
-// Keep the required legacy entry empty so legacy pages do not attempt to load
-// the incompatible @nocobase/client Plugin API.
-export default null;
+// Legacy client placeholder: the availability UI lives in client-v2. The legacy
+// loader calls these lifecycle hooks on every plugin instance, so all must exist.
+export default class PluginAppointmentAvailabilityLegacy {
+  constructor(public options: any = {}, public app?: any) {}
+  async afterAdd() {}
+  async beforeLoad() {}
+  async load() {}
+  async afterEnable() {}
+  async afterDisable() {}
+  async remove() {}
+}
