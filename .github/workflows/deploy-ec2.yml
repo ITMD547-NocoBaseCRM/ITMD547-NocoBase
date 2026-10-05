@@ -26,7 +26,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key_path: ${{ runner.temp }}/ec2_key.pem
-          command_timeout: 20m
+          command_timeout: 45m
           script: |
             set -e
             cd /opt/parlour-crm/app
