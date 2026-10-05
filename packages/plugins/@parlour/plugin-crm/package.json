@@ -1,0 +1,14 @@
+{
+  "name": "@parlour/plugin-crm",
+  "version": "0.1.0",
+  "main": "dist/server/index.js",
+  "dependencies": {
+    "mssql": "^12.7.2"
+  },
+  "peerDependencies": {
+    "@nocobase/client": "2.x",
+    "@nocobase/client-v2": "2.x",
+    "@nocobase/server": "2.x",
+    "@nocobase/test": "2.x"
+  }
+}
