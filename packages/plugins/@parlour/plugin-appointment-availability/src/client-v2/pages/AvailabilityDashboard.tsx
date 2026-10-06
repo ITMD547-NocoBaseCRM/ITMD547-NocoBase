@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useFlowContext } from '@nocobase/flow-engine';
 import { useT } from '../locale';
@@ -21,6 +21,8 @@ export default function AvailabilityDashboard() {
   const [error, setError] = useState('');
   const [editor, setEditor] = useState<'schedule' | 'override' | 'leave' | null>(null);
   const [saving, setSaving] = useState(false);
+  // Appointments that a new leave period would strand, and who covers each one.
+  const [cover, setCover] = useState<{ items: RecordItem[]; choices: Record<string, any> } | null>(null);
   const [form] = Form.useForm();
 
   const staffOptions = useMemo(() => staff.map((item) => ({ value: item.id, label: [item.firstName, item.lastName].filter(Boolean).join(' ') || 'Unnamed staff member' })), [staff]);
@@ -53,6 +55,16 @@ export default function AvailabilityDashboard() {
     if (editor === 'leave') { payload.startTime = values.range[0].toISOString(); payload.endTime = values.range[1].toISOString(); delete payload.range; }
     setSaving(true);
     try {
+      if (editor === 'leave') {
+        const response = await ctx.api.request({ url: 'appointmentAvailability:leaveConflicts', method: 'post', data: { staffId: payload.staffId, startTime: payload.startTime, endTime: payload.endTime } });
+        const items = dataOf(response).appointments || [];
+        if (items.length) {
+          setCover({ items, choices: Object.fromEntries(items.map((item: RecordItem) => [String(item.id), item.candidates?.[0]?.id])) });
+          pendingLeave.current = payload;
+          setSaving(false);
+          return;
+        }
+      }
       if (editor === 'schedule') {
         const weekdays = values.weekdays as number[];
         delete payload.weekdays;
@@ -63,6 +75,18 @@ export default function AvailabilityDashboard() {
       ctx.message.success(t('Saved successfully')); setEditor(null); await load();
     }
     catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
+  };
+  const pendingLeave = React.useRef<RecordItem | null>(null);
+  const confirmCover = async () => {
+    if (!cover || !pendingLeave.current) return;
+    if (cover.items.some((item) => !cover.choices[String(item.id)])) return;
+    setSaving(true);
+    try {
+      // Move the appointments first: the leave is rejected while they are still booked on this staff member.
+      for (const item of cover.items) await ctx.api.request({ url: 'appointments:update', method: 'post', params: { filterByTk: item.id }, data: { staffId: cover.choices[String(item.id)] } });
+      await ctx.api.request({ url: 'staffAvailabilityLeaves:create', method: 'post', data: pendingLeave.current });
+      ctx.message.success(t('Leave saved and appointments reassigned')); setCover(null); setEditor(null); pendingLeave.current = null; await load();
+    } catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
   };
   const remove = async (resource: string, id: any) => { try { await ctx.api.request({ url: `${resource}:destroy`, method: 'post', data: { filterByTk: id } }); await load(); } catch (requestError) { ctx.message.error(errorMessage(requestError)); } };
 
@@ -99,6 +123,18 @@ export default function AvailabilityDashboard() {
         ]} />
       </Card>
     </Space>
+    <Modal open={!!cover} title={t('Reassign appointments before leave')} okText={t('Reassign and save leave')} cancelText={t('Cancel')} confirmLoading={saving}
+      okButtonProps={{ disabled: !cover || cover.items.some((item) => !cover.choices[String(item.id)]) }} onOk={confirmCover} onCancel={() => { setCover(null); pendingLeave.current = null; }} width={640}>
+      <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={t('This staff member has appointments during the leave. Choose who covers each one.')} />
+      <List dataSource={cover?.items || []} renderItem={(item: RecordItem) => <List.Item>
+        <Space direction="vertical" style={{ width: '100%' }} size={4}>
+          <Typography.Text strong>{item.customerName} · {dayjs(item.startTime).format('MMM D, h:mm A')} – {dayjs(item.endTime).format('h:mm A')}</Typography.Text>
+          {item.candidates?.length
+            ? <Select style={{ width: '100%' }} value={cover?.choices[String(item.id)]} onChange={(value) => setCover((current) => current && ({ ...current, choices: { ...current.choices, [String(item.id)]: value } }))} options={item.candidates.map((candidate: RecordItem) => ({ value: candidate.id, label: candidate.name }))} />
+            : <Alert type="error" showIcon message={t('No other staff member is free at this time. Reschedule or cancel this appointment first.')} />}
+        </Space>
+      </List.Item>} />
+    </Modal>
     <Drawer title={editor === 'schedule' ? t('Recurring schedule') : editor === 'override' ? t('Date override') : t('Staff leave')} open={!!editor} onClose={() => setEditor(null)} width={480} forceRender destroyOnClose={false} footer={<Space><Button onClick={() => setEditor(null)}>{t('Cancel')}</Button><Button type="primary" loading={saving} onClick={save}>{t('Save')}</Button></Space>}>
       <Form form={form} layout="vertical">
         <Form.Item name="staffId" label={t('Staff')} rules={[{ required: true }]}><Select options={staffOptions} showSearch optionFilterProp="label" /></Form.Item>

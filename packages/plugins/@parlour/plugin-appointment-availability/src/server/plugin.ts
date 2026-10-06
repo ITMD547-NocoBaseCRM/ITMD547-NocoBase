@@ -57,6 +57,16 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
           }
           await next();
         },
+        leaveConflicts: async (ctx: any, next: any) => {
+          try {
+            const values = ctx.action.params.values || ctx.action.params;
+            if (!values.staffId || !values.startTime || !values.endTime) ctx.throw(400, 'Staff and leave period are required.');
+            ctx.body = { appointments: await this.availability.leaveConflicts(values) };
+          } catch (error) {
+            this.respondAvailabilityError(ctx, error);
+          }
+          await next();
+        },
         check: async (ctx: any, next: any) => {
           try {
             await this.availability.assertAvailable(ctx.action.params.values || ctx.action.params);
@@ -68,7 +78,7 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         },
       },
     });
-    this.app.acl.allow('appointmentAvailability', ['slots', 'check'], 'loggedIn');
+    this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts'], 'loggedIn');
     for (const collection of ['staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves', 'appointmentAvailabilitySettings']) {
       this.app.acl.allow(collection, '*', 'loggedIn');
     }
