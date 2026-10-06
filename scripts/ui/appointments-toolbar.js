@@ -61,6 +61,25 @@ const writeTabToUrl = (key) => {
 
 // Every list request goes through the server, so the authenticated user's ACL scope is always applied
 // together with these filters. Rows are never fetched just to be filtered here.
+// "When" quick filter: upcoming appointments soonest first, today, the next 7 or 30 days, or past ones.
+const WHEN_OPTS = [
+  { value: 'upcoming', label: 'Upcoming (soonest first)' },
+  { value: 'today', label: 'Today' },
+  { value: '7', label: 'Next 7 days' },
+  { value: '30', label: 'Next 30 days' },
+  { value: 'past', label: 'Past (most recent first)' },
+];
+const whenFilter = (v) => {
+  if (!v) return null;
+  const day = (offset) => dayjs().add(offset, 'day').format('YYYY-MM-DD');
+  const live = { status: { $notIn: ['cancelled', 'noShow'] } };
+  if (v === 'upcoming') return { $and: [{ startTime: { $gte: new Date().toISOString() } }, live] };
+  if (v === 'past') return { startTime: { $lt: new Date().toISOString() } };
+  if (v === 'today') return { $and: [{ appointmentDate: { $eq: day(0) } }, live] };
+  return { $and: [{ appointmentDate: { $gte: day(0) } }, { appointmentDate: { $lte: day(Number(v)) } }, live] };
+};
+const whenSort = (v) => (v === 'past' ? ['-startTime'] : v ? ['startTime'] : null);
+
 function buildFilter(st, opts = {}) {
   const and = [];
   const q = (st.q || '').trim();
@@ -75,6 +94,7 @@ function buildFilter(st, opts = {}) {
     if (CFG.dateRange.dateOnly) and.push({ [f]: { $gte: st.range[0].format('YYYY-MM-DD') } }, { [f]: { $lte: st.range[1].format('YYYY-MM-DD') } });
     else and.push({ [f]: { $gte: st.range[0].startOf('day').toISOString() } }, { [f]: { $lte: st.range[1].endOf('day').toISOString() } });
   }
+  const wf = whenFilter(st.when); if (wf) and.push(wf);
   if (!opts.skipTab) {
     const tabFilter = tabByKey(st.tab).filter;
     if (tabFilter && Object.keys(tabFilter).length) and.push(tabFilter);
@@ -82,7 +102,7 @@ function buildFilter(st, opts = {}) {
   return and.length ? { $and: and } : {};
 }
 const merge = (a, b) => { const x = [a, b].filter((f) => f && Object.keys(f).length); return x.length ? { $and: x } : {}; };
-const hasOtherFilters = (st) => !!((st.q || '').trim() || Object.values(st.sel).some((v) => v !== undefined && v !== null && v !== '') || (st.range && st.range[0] && st.range[1]));
+const hasOtherFilters = (st) => !!((st.q || '').trim() || Object.values(st.sel).some((v) => v !== undefined && v !== null && v !== '') || (st.range && st.range[0] && st.range[1]) || st.when);
 
 function parseCSV(text) {
   const rows = []; let row = [], cur = '', q = false;
@@ -109,7 +129,7 @@ const PAGER_FIX_CSS = '.ant-form .ant-form-item .ant-table-wrapper .ant-paginati
 function Toolbar() {
   const [meta, setMeta] = useState({ fields: {} });
   const [relOpts, setRelOpts] = useState({});
-  const [st, setSt] = useState(() => ({ q: '', sel: {}, range: null, tab: readTabFromUrl() }));
+  const [st, setSt] = useState(() => ({ q: '', sel: {}, range: null, when: undefined, tab: readTabFromUrl() }));
   const [counts, setCounts] = useState({});
   const [tabCounts, setTabCounts] = useState({});
   const [busy, setBusy] = useState(false);
@@ -165,6 +185,7 @@ function Toolbar() {
     const t = getTable(); const f = buildFilter(state);
     if (t?.resource) {
       if (Object.keys(f).length) t.resource.addFilterGroup(GROUP, f); else t.resource.removeFilterGroup(GROUP);
+      if (typeof t.resource.setSort === 'function') t.resource.setSort(whenSort(state.when) || CFG.sort || ['-appointmentDate', '-startTime']);
       t.resource.setPage(1);
       selfRefresh.current += 1;
       try { await t.resource.refresh(); }
@@ -205,7 +226,7 @@ function Toolbar() {
     clearTimeout(timer.current);
     if (debounce) timer.current = setTimeout(() => apply(next), 350); else apply(next, { tabs: !tabOnly });
   };
-  const clearAll = () => { const n = { q: '', sel: {}, range: null, tab: st.tab }; setSt(n); stRef.current = n; apply(n); };
+  const clearAll = () => { const n = { q: '', sel: {}, range: null, when: undefined, tab: st.tab }; setSt(n); stRef.current = n; apply(n); };
 
   const fmt = (col, v) => {
     if (v == null) return '';
@@ -307,6 +328,7 @@ function Toolbar() {
   const filters = h('div', { key: 'filters', style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
     CFG.search && h(Input, { key: 'q', allowClear: true, placeholder: CFG.search.placeholder || 'Search', value: st.q, onChange: (e) => update({ q: e.target.value }, true), style: { flex: '2 1 240px', minWidth: 200 }, prefix: h('span', { style: { color: '#9ca3af' } }, '⌕') }),
     ...(CFG.selects || []).map((s) => h(Select, { key: s.field, allowClear: true, showSearch: true, optionFilterProp: 'label', placeholder: s.placeholder, value: st.sel[s.field], options: selOptions(s), onChange: (v) => update({ sel: { [s.field]: v } }), style: { flex: '1 1 170px', minWidth: 150 } })),
+    h(Select, { key: 'when', allowClear: true, placeholder: 'When', value: st.when, options: WHEN_OPTS, onChange: (v) => update({ when: v }), style: { flex: '1 1 190px', minWidth: 170 } }),
     CFG.dateRange && h('span', { key: 'dr', style: { display: 'inline-flex', alignItems: 'center', gap: 6, flex: '1 1 300px' } },
       h('span', { style: { fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' } }, CFG.dateRange.label),
       h(DatePicker.RangePicker, { value: st.range, onChange: (v) => update({ range: v }), style: { flex: 1 } })),
