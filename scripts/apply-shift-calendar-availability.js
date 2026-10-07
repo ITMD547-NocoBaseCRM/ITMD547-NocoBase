@@ -39,16 +39,14 @@ async function main() {
   if (existing) { console.log(JSON.stringify({ status: 'ok', changed: false, block: existing.uid })); return; }
   const form = kids(grid.uid).find((m) => m.use === 'CreateFormModel');
 
-  const uid = `avl${Math.random().toString(36).slice(2, 10)}`;
-  let result = await client.request('flowModels:create', { method: 'POST', body: {
-    uid, name: uid, parentId: grid.uid, subKey: 'items', subType: 'array', use: 'JSBlockModel', props: {}, decoratorProps: {},
-    stepParams: { jsSettings: { runJs: { version: 'v2', code: CODE }, showBlockCard: { showBlockCard: false } } },
+  // Blocks must be added through flowSurfaces so the engine lays them out and links them to the grid;
+  // inserting flowModels rows directly leaves an empty drawer.
+  let result = await client.request('flowSurfaces:addBlock', { method: 'POST', body: {
+    target: { uid: grid.uid }, type: 'jsBlock', settings: { title: 'Manage availability', version: 'v2', code: CODE },
   } });
-  if (!result.ok) throw new Error(`create failed (${result.status})`);
-  const layout = { rows: { row1: [[uid]] }, sizes: { row1: [24] }, rowOrder: ['row1'] };
-  result = await client.request(`flowModels:update?filterByTk=${grid.uid}`, { method: 'POST', body: { props: layout, stepParams: { gridSettings: { grid: layout } } } });
-  if (!result.ok) throw new Error(`layout failed (${result.status})`);
-  if (form) await client.request(`flowModels:destroy?filterByTk=${form.uid}`, { method: 'POST' });
+  if (!result.ok) throw new Error(`addBlock failed (${result.status})`);
+  const uid = result.json.data.uid;
+  if (form) await client.request('flowSurfaces:removeNode', { method: 'POST', body: { target: { uid: form.uid } } });
   const tab = tree.find((m) => m.use === 'ChildPageTabModel');
   if (tab) await client.request(`flowModels:update?filterByTk=${tab.uid}`, { method: 'POST', body: { props: { title: 'Manage availability' }, stepParams: { pageTabSettings: { tab: { title: 'Manage availability' } } } } });
   console.log(JSON.stringify({ status: 'ok', changed: true, block: uid, removedForm: form && form.uid }));
