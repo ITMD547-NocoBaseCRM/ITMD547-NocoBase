@@ -10,7 +10,7 @@ const { createClient } = require('./nocobase-api');
 
 const SHIFTS = 'employeeShifts';
 const CODE = `const h = ctx.React.createElement;
-// A drag on the calendar hands the chosen start and end to this popup; forward them so the schedule form opens pre-filled.
+// A drag on the calendar hands the chosen start and end to this popup; forward them so the shift form opens pre-filled.
 // Anything unexpected falls back to the plain availability screen, so the drawer is never blank.
 let src = '/v/appointment-availability';
 try {
@@ -21,6 +21,12 @@ try {
   if (slot.endTime) parts.push('end=' + encodeURIComponent(String(slot.endTime)));
   if (parts.length) src += '?' + parts.join('&');
 } catch (error) { /* keep the plain screen */ }
+// When the embedded screen saves a shift, refresh the calendar behind this drawer so the new shift shows at once.
+const onMessage = (event) => {
+  if (event.origin !== window.location.origin || !event.data || event.data.type !== 'parlour:shift-saved') return;
+  try { const calendar = ctx.engine.getModel('__CALENDAR_UID__'); if (calendar && calendar.resource) calendar.resource.refresh(); } catch (error) { /* the Refresh button still works */ }
+};
+window.addEventListener('message', onMessage);
 ctx.render(h('iframe', { src, title: 'Manage availability', style: { width: '100%', height: '75vh', border: 0 } }));
 `;
 
@@ -46,14 +52,23 @@ async function main() {
   const tree = walk(popupUid);
   const grid = tree.find((m) => m.use === 'BlockGridModel');
   if (!grid) throw new Error('Quick-create popup grid not found');
+  const code = CODE.replace('__CALENDAR_UID__', calendar.uid);
   const existing = kids(grid.uid).find((m) => m.use === 'JSBlockModel');
-  if (existing) { console.log(JSON.stringify({ status: 'ok', changed: false, block: existing.uid })); return; }
+  if (existing) {
+    // Already swapped: only bring the block's script up to date.
+    const current = existing.stepParams?.jsSettings?.runJs?.code;
+    if (current === code) { console.log(JSON.stringify({ status: 'ok', changed: false, block: existing.uid })); return; }
+    const stepParams = { ...existing.stepParams, jsSettings: { ...existing.stepParams.jsSettings, runJs: { version: 'v2', code } } };
+    const synced = await client.request(`flowModels:update?filterByTk=${existing.uid}`, { method: 'POST', body: { stepParams } });
+    if (!synced.ok) throw new Error(`code sync failed (${synced.status})`);
+    console.log(JSON.stringify({ status: 'ok', changed: true, block: existing.uid, codeUpdated: true })); return;
+  }
   const form = kids(grid.uid).find((m) => m.use === 'CreateFormModel');
 
   // Blocks must be added through flowSurfaces so the engine lays them out and links them to the grid;
   // inserting flowModels rows directly leaves an empty drawer.
   let result = await client.request('flowSurfaces:addBlock', { method: 'POST', body: {
-    target: { uid: grid.uid }, type: 'jsBlock', settings: { title: 'Manage availability', version: 'v2', code: CODE },
+    target: { uid: grid.uid }, type: 'jsBlock', settings: { title: 'Manage availability', version: 'v2', code },
   } });
   if (!result.ok) throw new Error(`addBlock failed (${result.status})`);
   const uid = result.json.data.uid;
