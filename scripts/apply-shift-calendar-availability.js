@@ -11,12 +11,16 @@ const { createClient } = require('./nocobase-api');
 const SHIFTS = 'employeeShifts';
 const CODE = `const h = ctx.React.createElement;
 // A drag on the calendar hands the chosen start and end to this popup; forward them so the schedule form opens pre-filled.
-const args = (ctx.view && ctx.view.inputArgs) || {};
-const slot = args.formData || {};
-const query = new URLSearchParams();
-if (slot.startTime) query.set('start', String(slot.startTime));
-if (slot.endTime) query.set('end', String(slot.endTime));
-const src = '/v/appointment-availability' + (query.toString() ? '?' + query.toString() : '');
+// Anything unexpected falls back to the plain availability screen, so the drawer is never blank.
+let src = '/v/appointment-availability';
+try {
+  const args = (ctx.view && ctx.view.inputArgs) || {};
+  const slot = args.formData || {};
+  const parts = [];
+  if (slot.startTime) parts.push('start=' + encodeURIComponent(String(slot.startTime)));
+  if (slot.endTime) parts.push('end=' + encodeURIComponent(String(slot.endTime)));
+  if (parts.length) src += '?' + parts.join('&');
+} catch (error) { /* keep the plain screen */ }
 ctx.render(h('iframe', { src, title: 'Manage availability', style: { width: '100%', height: '75vh', border: 0 } }));
 `;
 
