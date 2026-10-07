@@ -49,9 +49,13 @@ export default function AvailabilityDashboard() {
     const startParam = params.get('start');
     if (!startParam) return;
     slotHandled.current = true;
-    const start = dayjs(startParam);
+    // The calendar sends the dragged wall-clock time with a "Z" suffix; keep the clock reading as-is
+    // instead of shifting it by the browser's offset.
+    const wallClock = (value: string) => dayjs(value.replace(/(\.\d+)?Z$/, ''));
+    const start = wallClock(startParam);
     if (!start.isValid()) return;
-    let end = params.get('end') ? dayjs(params.get('end') as string) : start.add(1, 'hour');
+    const endParam = params.get('end');
+    const end = endParam ? wallClock(endParam) : start.add(1, 'hour');
     // A month-view click or all-day slot has no useful times: fall back to a normal working day.
     const dayOnly = start.hour() === 0 && start.minute() === 0 && (!end.isValid() || !end.isAfter(start) || end.diff(start, 'hour') >= 23);
     const from = dayOnly ? start.hour(9).minute(0) : start;
@@ -63,11 +67,11 @@ export default function AvailabilityDashboard() {
   const slotValues = React.useRef<RecordItem | null>(null);
   useEffect(() => {
     if (editor !== 'schedule' || !slotValues.current) return;
-    const timer = window.setTimeout(() => {
-      if (!slotValues.current) return;
-      form.resetFields(); form.setFieldsValue(slotValues.current); slotValues.current = null;
-    }, 150);
-    return () => window.clearTimeout(timer);
+    const apply = () => { if (slotValues.current) { form.resetFields(); form.setFieldsValue(slotValues.current); } };
+    const timer = window.setTimeout(apply, 150);
+    // If the drawer's fields mounted late and dropped the values, apply them once more before giving up.
+    const retry = window.setTimeout(() => { if (!(form.getFieldValue('weekdays') || []).length) apply(); slotValues.current = null; }, 600);
+    return () => { window.clearTimeout(timer); window.clearTimeout(retry); };
   }, [editor]);
 
   const openEditor = (kind: 'schedule' | 'override' | 'leave') => {
