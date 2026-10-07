@@ -41,6 +41,26 @@ export default function AvailabilityDashboard() {
   };
   useEffect(() => { load(); }, []);
 
+  // Opened from a drag on the shift calendar: ?start=...&end=... pre-fills a new recurring schedule.
+  const slotHandled = React.useRef(false);
+  useEffect(() => {
+    if (loading || slotHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const startParam = params.get('start');
+    if (!startParam) return;
+    slotHandled.current = true;
+    const start = dayjs(startParam);
+    if (!start.isValid()) return;
+    let end = params.get('end') ? dayjs(params.get('end') as string) : start.add(1, 'hour');
+    // A month-view click or all-day slot has no useful times: fall back to a normal working day.
+    const dayOnly = start.hour() === 0 && start.minute() === 0 && (!end.isValid() || !end.isAfter(start) || end.diff(start, 'hour') >= 23);
+    const from = dayOnly ? start.hour(9).minute(0) : start;
+    const to = dayOnly ? start.hour(17).minute(0) : (end.isValid() && end.isAfter(start) ? end : start.add(1, 'hour'));
+    form.resetFields();
+    form.setFieldsValue({ isWorking: true, weekdays: [start.day()], effectiveFrom: start.startOf('day'), periods: [{ start: from, end: to }] });
+    setEditor('schedule');
+  }, [loading]);
+
   const openEditor = (kind: 'schedule' | 'override' | 'leave') => {
     form.resetFields();
     if (kind !== 'leave') form.setFieldsValue({ isWorking: true, periods: [{ start: dayjs('09:00', 'HH:mm'), end: dayjs('17:00', 'HH:mm') }] });
