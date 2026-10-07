@@ -13,6 +13,20 @@ export class PluginCrmServer extends Plugin {
       model.set('birthMonthDay', match ? Number(match[1] + match[2]) : null);
     });
 
+    // A booked service starts from the service's own price and duration. Staff can still change
+    // them per booking; they are only filled in when left blank.
+    this.db.on('appointmentServices.beforeSave', async (model: any, options: any) => {
+      const serviceId = model.get('serviceId');
+      if (!serviceId) return;
+      const missingPrice = model.get('priceAtBooking') == null;
+      const missingDuration = model.get('durationAtBooking') == null;
+      if (!missingPrice && !missingDuration) return;
+      const service = await this.db.getRepository('services').findOne({ filterByTk: serviceId, transaction: options?.transaction });
+      if (!service) return;
+      if (missingPrice) model.set('priceAtBooking', service.get('price'));
+      if (missingDuration) model.set('durationAtBooking', service.get('durationMinutes'));
+    });
+
     // Visits = completed appointments. Recount after the appointment commits so
     // we never query on a second pooled connection inside its transaction.
     const recount = (customerId: any, options: any) => {
