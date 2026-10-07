@@ -1,5 +1,8 @@
 // Makes a click on the Employee shifts calendar open the availability manager instead of the plain shift form.
 //
+// NOTE: the salon chose to keep the native "Add new" shift form in that drawer (2026-10-07). Only run this if
+// that decision changes; scripts/restore-shift-calendar-add-new.js undoes it.
+//
 // Usage: node scripts/apply-shift-calendar-availability.js
 //
 // The calendar's quick-create drawer holds a CreateForm for employeeShifts. This replaces that form with a JS
