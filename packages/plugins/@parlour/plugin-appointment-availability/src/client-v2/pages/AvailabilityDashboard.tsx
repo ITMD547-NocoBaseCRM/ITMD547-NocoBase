@@ -56,10 +56,19 @@ export default function AvailabilityDashboard() {
     const dayOnly = start.hour() === 0 && start.minute() === 0 && (!end.isValid() || !end.isAfter(start) || end.diff(start, 'hour') >= 23);
     const from = dayOnly ? start.hour(9).minute(0) : start;
     const to = dayOnly ? start.hour(17).minute(0) : (end.isValid() && end.isAfter(start) ? end : start.add(1, 'hour'));
-    form.resetFields();
-    form.setFieldsValue({ isWorking: true, weekdays: [start.day()], effectiveFrom: start.startOf('day'), periods: [{ start: from, end: to }] });
+    // Applied once the drawer is open (see the effect below): values set before its form mounts are lost.
+    slotValues.current = { isWorking: true, weekdays: [start.day()], effectiveFrom: start.startOf('day'), periods: [{ start: from, end: to }] };
     setEditor('schedule');
   }, [loading]);
+  const slotValues = React.useRef<RecordItem | null>(null);
+  useEffect(() => {
+    if (editor !== 'schedule' || !slotValues.current) return;
+    const timer = window.setTimeout(() => {
+      if (!slotValues.current) return;
+      form.resetFields(); form.setFieldsValue(slotValues.current); slotValues.current = null;
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [editor]);
 
   const openEditor = (kind: 'schedule' | 'override' | 'leave') => {
     form.resetFields();
