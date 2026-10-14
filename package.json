@@ -37,7 +37,14 @@
     "test:appointments-qa-api": "node --test --test-concurrency=1 --test-timeout=180000 scripts/qa/appointments.api.test.js scripts/qa/appointments.authz.test.js",
     "test:appointments-qa-ui": "node --test --test-concurrency=1 --test-timeout=2400000 scripts/qa/appointments.ui.test.js",
     "migrate:appointment-date": "node scripts/run-appointment-date-migration.js",
-    "migrate:appointment-messages": "node scripts/run-appointment-messages-migration.js"
+    "migrate:appointment-messages": "node scripts/run-appointment-messages-migration.js",
+    "migrate:customer-activity": "node scripts/run-customer-activity-migration.js",
+    "apply:customer-activity": "node scripts/apply-customer-activity.js",
+    "test:customer-activity": "node --test scripts/customer-activity.test.js",
+    "seed:customer-activity": "node scripts/seed-customer-activity.js",
+    "apply:customer-forms": "node scripts/apply-customer-forms.js",
+    "apply:customer-messaging": "node scripts/apply-customer-messaging.js",
+    "apply:customer-birthday": "node scripts/apply-customer-birthday.js"
   },
   "resolutions": {
     "cytoscape": "3.28.0",
