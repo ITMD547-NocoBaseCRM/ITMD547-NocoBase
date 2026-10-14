@@ -200,9 +200,17 @@ export class AvailabilityService {
         });
       }
     }
-    if (!records.length) return 0;
-    await shifts.createMany({ records });
-    return records.length;
+    // A manually entered shift for the same hours already shows the staff member as working,
+    // so generating another one would just double it on the calendar.
+    const manual = (await shifts.find({
+      filter: { $and: [{ staffId: schedule.staffId }, { shiftDate: { $gte: firstDate } }, { shiftDate: { $lte: lastDate } }, { shiftType: { $ne: 'availability' } }] },
+      fields: ['startTime', 'endTime'],
+    })).map((item: any) => plain(item));
+    const covered = (record: Record<string, any>) => manual.some((item: any) => new Date(item.startTime) <= new Date(record.startTime as any) && new Date(item.endTime) >= new Date(record.endTime as any));
+    const fresh = records.filter((record) => !covered(record));
+    if (!fresh.length) return 0;
+    await shifts.createMany({ records: fresh });
+    return fresh.length;
   }
 
   async clearScheduleProjection(input: unknown) {
@@ -309,6 +317,53 @@ export class AvailabilityService {
       .join(' ')
       .trim();
     return name || 'Staff member';
+  }
+
+  /**
+   * Appointments a leave period would strand, each with the other staff members who could take it.
+   * Used by the leave form to ask who should cover before the leave is saved.
+   */
+  async leaveConflicts(input: { staffId: number | string; startTime: Date | string; endTime: Date | string }) {
+    const start = new Date(input.startTime);
+    const end = new Date(input.endTime);
+    if (!input.staffId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return [];
+    const appointments = await this.db.getRepository('appointments').find({
+      filter: { $and: [
+        { staffId: input.staffId },
+        { status: { $notIn: UNAVAILABLE_STATUSES } },
+        { startTime: { $lt: end } },
+        // Appointments without an end time are matched on their start time alone.
+        { $or: [{ endTime: { $gt: start } }, { $and: [{ endTime: { $eq: null } }, { startTime: { $gte: start } }] }] },
+      ] },
+      appends: ['customer'],
+      sort: ['startTime'],
+    });
+    const others = (await this.db.getRepository('staff').find({ fields: ['id', 'firstName', 'lastName', 'active'] }))
+      .map((item: any) => plain(item))
+      .filter((item: any) => String(item.id) !== String(input.staffId) && item.active !== false);
+    const result = [];
+    for (const record of appointments) {
+      const appointment = plain(record);
+      const candidates = [];
+      for (const staff of others) {
+        try {
+          await this.assertAvailable({ staffId: staff.id, startTime: appointment.startTime, ...(appointment.endTime ? { endTime: appointment.endTime } : {}), excludeAppointmentId: appointment.id });
+          candidates.push({ id: staff.id, name: [staff.firstName, staff.lastName].filter(Boolean).join(' ') || 'Staff member' });
+        } catch (error) {
+          if (!(error instanceof AvailabilityError)) throw error;
+        }
+      }
+      const customer = plain(appointment.customer);
+      result.push({
+        id: appointment.id,
+        startTime: appointment.startTime,
+        endTime: appointment.endTime,
+        status: appointment.status,
+        customerName: [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || 'Customer',
+        candidates,
+      });
+    }
+    return result;
   }
 
   async assertNoAppointmentsWouldBeInvalidated(staffId: number | string, start: Date, end: Date, ignoreAppointmentId?: number | string) {

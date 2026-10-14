@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Checkbox, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
+import { Alert, Button, Card, Checkbox, Col, DatePicker, Drawer, Form, Input, InputNumber, List, Modal, Row, Select, Space, Spin, Table, Tabs, Tag, TimePicker, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { useFlowContext } from '@nocobase/flow-engine';
 import { useT } from '../locale';
 
 type RecordItem = Record<string, any>;
+type EditorKind = 'shift' | 'schedule' | 'override' | 'leave';
 const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const dataOf = (response: any) => response?.data?.data || response?.data || [];
 const errorMessage = (error: any) => error?.response?.data?.errors?.[0]?.message || error?.response?.data?.message || 'Unable to complete this request. Please try again.';
@@ -17,10 +18,13 @@ export default function AvailabilityDashboard() {
   const [schedules, setSchedules] = useState<RecordItem[]>([]);
   const [overrides, setOverrides] = useState<RecordItem[]>([]);
   const [leaves, setLeaves] = useState<RecordItem[]>([]);
+  const [shifts, setShifts] = useState<RecordItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editor, setEditor] = useState<'schedule' | 'override' | 'leave' | null>(null);
+  const [editor, setEditor] = useState<EditorKind | null>(null);
   const [saving, setSaving] = useState(false);
+  // Appointments that a new leave period would strand, and who covers each one.
+  const [cover, setCover] = useState<{ items: RecordItem[]; choices: Record<string, any> } | null>(null);
   const [form] = Form.useForm();
 
   const staffOptions = useMemo(() => staff.map((item) => ({ value: item.id, label: [item.firstName, item.lastName].filter(Boolean).join(' ') || 'Unnamed staff member' })), [staff]);
@@ -28,31 +32,86 @@ export default function AvailabilityDashboard() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const [staffResult, scheduleResult, overrideResult, leaveResult] = await Promise.all([
+      const [staffResult, scheduleResult, overrideResult, leaveResult, shiftResult] = await Promise.all([
         ctx.api.request({ url: 'staff:list', method: 'get', params: { fields: ['id', 'firstName', 'lastName'], pageSize: 200 } }),
         ctx.api.request({ url: 'staffAvailabilitySchedules:list', method: 'get', params: { pageSize: 200, sort: ['weekday', '-effectiveFrom'] } }),
         ctx.api.request({ url: 'staffAvailabilityOverrides:list', method: 'get', params: { pageSize: 200, sort: ['-date'] } }),
         ctx.api.request({ url: 'staffAvailabilityLeaves:list', method: 'get', params: { pageSize: 200, sort: ['startTime'] } }),
+        // Shifts entered by hand; the ones this plugin generates from schedules are listed under Recurring schedules.
+        ctx.api.request({ url: 'employeeShifts:list', method: 'get', params: { pageSize: 200, sort: ['shiftDate', 'startTime'], filter: { $and: [{ shiftDate: { $gte: dayjs().format('YYYY-MM-DD') } }, { shiftType: { $ne: 'availability' } }] } } }),
       ]);
-      setStaff(dataOf(staffResult)); setSchedules(dataOf(scheduleResult)); setOverrides(dataOf(overrideResult)); setLeaves(dataOf(leaveResult));
+      setStaff(dataOf(staffResult)); setSchedules(dataOf(scheduleResult)); setOverrides(dataOf(overrideResult)); setLeaves(dataOf(leaveResult)); setShifts(dataOf(shiftResult));
     } catch (requestError) { setError(errorMessage(requestError)); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
 
-  const openEditor = (kind: 'schedule' | 'override' | 'leave') => {
+  // Opened from a drag on the shift calendar: ?start=...&end=... pre-fills a new shift for that slot.
+  const slotHandled = React.useRef(false);
+  useEffect(() => {
+    if (loading || slotHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const startParam = params.get('start');
+    if (!startParam) return;
+    slotHandled.current = true;
+    // The calendar sends the dragged wall-clock time with a "Z" suffix; keep the clock reading as-is
+    // instead of shifting it by the browser's offset.
+    const wallClock = (value: string) => dayjs(value.replace(/(\.\d+)?Z$/, ''));
+    const start = wallClock(startParam);
+    if (!start.isValid()) return;
+    const endParam = params.get('end');
+    const end = endParam ? wallClock(endParam) : start.add(1, 'hour');
+    // A month-view click or all-day slot has no useful times: fall back to a normal working day.
+    const dayOnly = start.hour() === 0 && start.minute() === 0 && (!end.isValid() || !end.isAfter(start) || end.diff(start, 'hour') >= 23);
+    const from = dayOnly ? start.hour(9).minute(0) : start;
+    const to = dayOnly ? start.hour(17).minute(0) : (end.isValid() && end.isAfter(start) ? end : start.add(1, 'hour'));
+    // Applied once the drawer is open (see the effect below): values set before its form mounts are lost.
+    slotValues.current = { shiftType: 'regular', status: 'scheduled', shiftDate: start.startOf('day'), startTime: from, endTime: to };
+    setEditor('shift');
+  }, [loading]);
+  const slotValues = React.useRef<RecordItem | null>(null);
+  useEffect(() => {
+    if (editor !== 'shift' || !slotValues.current) return;
+    const apply = () => { if (slotValues.current) { form.resetFields(); form.setFieldsValue(slotValues.current); } };
+    const timer = window.setTimeout(apply, 150);
+    // If the drawer's fields mounted late and dropped the values, apply them once more before giving up.
+    const retry = window.setTimeout(() => { if (!form.getFieldValue('shiftDate')) apply(); slotValues.current = null; }, 600);
+    return () => { window.clearTimeout(timer); window.clearTimeout(retry); };
+  }, [editor]);
+
+  const openEditor = (kind: EditorKind) => {
     form.resetFields();
-    if (kind !== 'leave') form.setFieldsValue({ isWorking: true, periods: [{ start: dayjs('09:00', 'HH:mm'), end: dayjs('17:00', 'HH:mm') }] });
+    if (kind === 'shift') form.setFieldsValue({ shiftType: 'regular', status: 'scheduled', shiftDate: dayjs(), startTime: dayjs('09:00', 'HH:mm'), endTime: dayjs('17:00', 'HH:mm') });
+    else if (kind !== 'leave') form.setFieldsValue({ isWorking: true, periods: [{ start: dayjs('09:00', 'HH:mm'), end: dayjs('17:00', 'HH:mm') }] });
     setEditor(kind);
   };
   const save = async () => {
     const values = await form.validateFields();
-    const resource = editor === 'schedule' ? 'staffAvailabilitySchedules' : editor === 'override' ? 'staffAvailabilityOverrides' : 'staffAvailabilityLeaves';
+    const resource = editor === 'shift' ? 'employeeShifts' : editor === 'schedule' ? 'staffAvailabilitySchedules' : editor === 'override' ? 'staffAvailabilityOverrides' : 'staffAvailabilityLeaves';
     const payload: RecordItem = { ...values };
     if (editor === 'schedule') { payload.effectiveFrom = values.effectiveFrom.format('YYYY-MM-DD'); payload.effectiveTo = values.effectiveTo?.format('YYYY-MM-DD'); payload.periods = toPeriods(values); }
     if (editor === 'override') { payload.date = values.date.format('YYYY-MM-DD'); payload.periods = values.isWorking ? toPeriods(values) : []; }
     if (editor === 'leave') { payload.startTime = values.range[0].toISOString(); payload.endTime = values.range[1].toISOString(); delete payload.range; }
+    if (editor === 'shift') {
+      // The form takes a date plus clock times; the shift itself is stored as two instants, like the hand-entered shifts already are.
+      const day = values.shiftDate.startOf('day');
+      const at = (time: any) => day.hour(time.hour()).minute(time.minute()).second(0).millisecond(0);
+      const startAt = at(values.startTime); const endAt = at(values.endTime);
+      if (!endAt.isAfter(startAt)) { ctx.message.error(t('Shift end time must be after the start time.')); return; }
+      // The "Validate employee shift" workflow reads the staff relation (values.staff), so send it alongside the key.
+      Object.assign(payload, { staff: { id: values.staffId }, shiftDate: day.format('YYYY-MM-DD'), startTime: startAt.toISOString(), endTime: endAt.toISOString(), calendarTitle: staffLabel(values.staffId) });
+    }
     setSaving(true);
     try {
+      if (editor === 'leave') {
+        const response = await ctx.api.request({ url: 'appointmentAvailability:leaveConflicts', method: 'post', data: { staffId: payload.staffId, startTime: payload.startTime, endTime: payload.endTime } });
+        const items = dataOf(response).appointments || [];
+        if (items.length) {
+          setCover({ items, choices: Object.fromEntries(items.map((item: RecordItem) => [String(item.id), item.candidates?.[0]?.id])) });
+          pendingLeave.current = payload;
+          setSaving(false);
+          return;
+        }
+      }
       if (editor === 'schedule') {
         const weekdays = values.weekdays as number[];
         delete payload.weekdays;
@@ -61,11 +120,33 @@ export default function AvailabilityDashboard() {
         await ctx.api.request({ url: `${resource}:create`, method: 'post', data: payload });
       }
       ctx.message.success(t('Saved successfully')); setEditor(null); await load();
+      // Let the shift calendar hosting this screen refresh its events.
+      if (editor === 'shift') { try { window.parent?.postMessage({ type: 'parlour:shift-saved' }, window.location.origin); } catch (notifyError) { /* not embedded */ } }
     }
     catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
   };
+  const pendingLeave = React.useRef<RecordItem | null>(null);
+  const confirmCover = async () => {
+    if (!cover || !pendingLeave.current) return;
+    if (cover.items.some((item) => !cover.choices[String(item.id)])) return;
+    setSaving(true);
+    try {
+      // Move the appointments first: the leave is rejected while they are still booked on this staff member.
+      for (const item of cover.items) await ctx.api.request({ url: 'appointments:update', method: 'post', params: { filterByTk: item.id }, data: { staffId: cover.choices[String(item.id)] } });
+      await ctx.api.request({ url: 'staffAvailabilityLeaves:create', method: 'post', data: pendingLeave.current });
+      ctx.message.success(t('Leave saved and appointments reassigned')); setCover(null); setEditor(null); pendingLeave.current = null; await load();
+    } catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
+  };
   const remove = async (resource: string, id: any) => { try { await ctx.api.request({ url: `${resource}:destroy`, method: 'post', data: { filterByTk: id } }); await load(); } catch (requestError) { ctx.message.error(errorMessage(requestError)); } };
 
+  const shiftColumns = [
+    { title: t('Staff'), render: (item: RecordItem) => staffLabel(item.staffId) },
+    { title: t('Date'), dataIndex: 'shiftDate' },
+    { title: t('Time'), render: (item: RecordItem) => `${dayjs(item.startTime).format('h:mm A')} – ${dayjs(item.endTime).format('h:mm A')}` },
+    { title: t('Type'), dataIndex: 'shiftType', render: (value: string) => <Tag>{value === 'adHoc' ? t('Ad hoc') : t('Regular')}</Tag> },
+    { title: t('Status'), dataIndex: 'status', render: (value: string) => <Tag color={value === 'cancelled' ? 'default' : value === 'completed' ? 'green' : 'blue'}>{value}</Tag> },
+    { title: t('Actions'), render: (item: RecordItem) => <Button type="link" danger onClick={() => remove('employeeShifts', item.id)}>{t('Delete')}</Button> },
+  ];
   const scheduleColumns = [
     { title: t('Staff'), render: (item: RecordItem) => staffLabel(item.staffId) },
     { title: t('Day'), dataIndex: 'weekday', render: (value: number) => weekdays[value] || '—' },
@@ -93,20 +174,39 @@ export default function AvailabilityDashboard() {
       <AvailabilityLookup staffOptions={staffOptions} />
       <Card>
         <Tabs items={[
+          { key: 'shifts', label: t('Shifts'), children: <><Button type="primary" onClick={() => openEditor('shift')} style={{ marginBottom: 16 }}>{t('Add shift')}</Button><Table rowKey="id" columns={shiftColumns} dataSource={shifts} pagination={{ pageSize: 10 }} scroll={{ x: 720 }} /></> },
           { key: 'schedules', label: t('Recurring schedules'), children: <><Button type="primary" onClick={() => openEditor('schedule')} style={{ marginBottom: 16 }}>{t('Add schedule')}</Button><Table rowKey="id" columns={scheduleColumns} dataSource={schedules} pagination={{ pageSize: 10 }} scroll={{ x: 720 }} /></> },
           { key: 'overrides', label: t('Date overrides'), children: <><Button type="primary" onClick={() => openEditor('override')} style={{ marginBottom: 16 }}>{t('Add override')}</Button><Table rowKey="id" columns={overrideColumns} dataSource={overrides} pagination={{ pageSize: 10 }} scroll={{ x: 720 }} /></> },
           { key: 'leave', label: t('Leave'), children: <><Button type="primary" onClick={() => openEditor('leave')} style={{ marginBottom: 16 }}>{t('Add leave')}</Button><Table rowKey="id" columns={leaveColumns} dataSource={leaves} pagination={{ pageSize: 10 }} scroll={{ x: 720 }} /></> },
         ]} />
       </Card>
     </Space>
-    <Drawer title={editor === 'schedule' ? t('Recurring schedule') : editor === 'override' ? t('Date override') : t('Staff leave')} open={!!editor} onClose={() => setEditor(null)} width={480} forceRender destroyOnClose={false} footer={<Space><Button onClick={() => setEditor(null)}>{t('Cancel')}</Button><Button type="primary" loading={saving} onClick={save}>{t('Save')}</Button></Space>}>
+    <Modal open={!!cover} title={t('Reassign appointments before leave')} okText={t('Reassign and save leave')} cancelText={t('Cancel')} confirmLoading={saving}
+      okButtonProps={{ disabled: !cover || cover.items.some((item) => !cover.choices[String(item.id)]) }} onOk={confirmCover} onCancel={() => { setCover(null); pendingLeave.current = null; }} width={640}>
+      <Alert type="warning" showIcon style={{ marginBottom: 16 }} message={t('This staff member has appointments during the leave. Choose who covers each one.')} />
+      <List dataSource={cover?.items || []} renderItem={(item: RecordItem) => <List.Item>
+        <Space direction="vertical" style={{ width: '100%' }} size={4}>
+          <Typography.Text strong>{item.customerName} · {dayjs(item.startTime).format('MMM D, h:mm A')} – {dayjs(item.endTime).format('h:mm A')}</Typography.Text>
+          {item.candidates?.length
+            ? <Select style={{ width: '100%' }} value={cover?.choices[String(item.id)]} onChange={(value) => setCover((current) => current && ({ ...current, choices: { ...current.choices, [String(item.id)]: value } }))} options={item.candidates.map((candidate: RecordItem) => ({ value: candidate.id, label: candidate.name }))} />
+            : <Alert type="error" showIcon message={t('No other staff member is free at this time. Reschedule or cancel this appointment first.')} />}
+        </Space>
+      </List.Item>} />
+    </Modal>
+    <Drawer title={editor === 'shift' ? t('Add shift') : editor === 'schedule' ? t('Recurring schedule') : editor === 'override' ? t('Date override') : t('Staff leave')} open={!!editor} onClose={() => setEditor(null)} width={480} forceRender destroyOnClose={false} footer={<Space><Button onClick={() => setEditor(null)}>{t('Cancel')}</Button><Button type="primary" loading={saving} onClick={save}>{t('Save')}</Button></Space>}>
       <Form form={form} layout="vertical">
         <Form.Item name="staffId" label={t('Staff')} rules={[{ required: true }]}><Select options={staffOptions} showSearch optionFilterProp="label" /></Form.Item>
         {editor === 'schedule' && <><Form.Item name="weekdays" label={t('Days')} rules={[{ required: true, type: 'array', min: 1 }]}><Checkbox.Group options={weekdays.map((label, value) => ({ label, value }))} style={{ display: 'flex', flexDirection: 'column', gap: 8 }} /></Form.Item><Row gutter={12}><Col span={12}><Form.Item name="effectiveFrom" label={t('Effective from')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item></Col><Col span={12}><Form.Item name="effectiveTo" label={t('Effective to')}><DatePicker style={{ width: '100%' }} /></Form.Item></Col></Row></>}
         {editor === 'override' && <Form.Item name="date" label={t('Date')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>}
-        {editor !== 'leave' && <><Form.Item name="isWorking" label={t('Working')} rules={[{ required: true }]}><Select options={[{ value: true, label: t('Available') }, { value: false, label: t('Day off') }]} /></Form.Item><Form.List name="periods">{(fields, { add, remove }) => <>{fields.map(({ key, ...field }) => <Row gutter={8} key={key}><Col span={10}><Form.Item {...field} name={[field.name, 'start']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={10}><Form.Item {...field} name={[field.name, 'end']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={4}><Button onClick={() => remove(field.name)} aria-label={t('Remove period')}>×</Button></Col></Row>)}<Button onClick={() => add()}>{t('Add period')}</Button></>}</Form.List></>}
+        {editor === 'shift' && <>
+          <Form.Item name="shiftDate" label={t('Shift date')} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} /></Form.Item>
+          <Row gutter={12}><Col span={12}><Form.Item name="startTime" label={t('Start time')} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={12}><Form.Item name="endTime" label={t('End time')} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col></Row>
+          <Row gutter={12}><Col span={12}><Form.Item name="shiftType" label={t('Shift type')} rules={[{ required: true }]}><Select options={[{ value: 'regular', label: t('Regular') }, { value: 'adHoc', label: t('Ad hoc') }]} /></Form.Item></Col><Col span={12}><Form.Item name="status" label={t('Status')} rules={[{ required: true }]}><Select options={[{ value: 'scheduled', label: t('Scheduled') }, { value: 'completed', label: t('Completed') }, { value: 'cancelled', label: t('Cancelled') }]} /></Form.Item></Col></Row>
+          <Form.Item name="notes" label={t('Notes')}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
+        </>}
+        {(editor === 'schedule' || editor === 'override') && <><Form.Item name="isWorking" label={t('Working')} rules={[{ required: true }]}><Select options={[{ value: true, label: t('Available') }, { value: false, label: t('Day off') }]} /></Form.Item><Form.List name="periods">{(fields, { add, remove }) => <>{fields.map(({ key, ...field }) => <Row gutter={8} key={key}><Col span={10}><Form.Item {...field} name={[field.name, 'start']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={10}><Form.Item {...field} name={[field.name, 'end']} rules={[{ required: true }]}><TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} /></Form.Item></Col><Col span={4}><Button onClick={() => remove(field.name)} aria-label={t('Remove period')}>×</Button></Col></Row>)}<Button onClick={() => add()}>{t('Add period')}</Button></>}</Form.List></>}
         {editor === 'leave' && <Form.Item name="range" label={t('Leave period')} rules={[{ required: true }]}><DatePicker.RangePicker showTime style={{ width: '100%' }} /></Form.Item>}
-        <Form.Item name="reason" label={t('Reason')}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>
+        {editor !== 'shift' && <Form.Item name="reason" label={t('Reason')}><Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }} /></Form.Item>}
       </Form>
     </Drawer>
   </div>;

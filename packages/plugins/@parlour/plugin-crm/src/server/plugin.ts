@@ -4,7 +4,51 @@ import sql from 'mssql';
 export class PluginCrmServer extends Plugin {
   async afterAdd() {}
 
-  async beforeLoad() {}
+  async beforeLoad() {
+    // Keep a month/day sort key (MMDD) so the customer list can be ordered by
+    // upcoming birthday regardless of birth year.
+    this.db.on('customers.beforeSave', (model: any) => {
+      const dob = model.get('dateOfBirth');
+      const match = typeof dob === 'string' ? dob.match(/^\d{4}-(\d{2})-(\d{2})/) : null;
+      model.set('birthMonthDay', match ? Number(match[1] + match[2]) : null);
+    });
+
+    // A booked service starts from the service's own price and duration. Staff can still change
+    // them per booking; they are only filled in when left blank.
+    this.db.on('appointmentServices.beforeSave', async (model: any, options: any) => {
+      const serviceId = model.get('serviceId');
+      if (!serviceId) return;
+      const missingPrice = model.get('priceAtBooking') == null;
+      const missingDuration = model.get('durationAtBooking') == null;
+      if (!missingPrice && !missingDuration) return;
+      const service = await this.db.getRepository('services').findOne({ filterByTk: serviceId, transaction: options?.transaction });
+      if (!service) return;
+      if (missingPrice) model.set('priceAtBooking', service.get('price'));
+      if (missingDuration) model.set('durationAtBooking', service.get('durationMinutes'));
+    });
+
+    // Visits = completed appointments. Recount after the appointment commits so
+    // we never query on a second pooled connection inside its transaction.
+    const recount = (customerId: any, options: any) => {
+      if (!customerId) return;
+      const run = async () => {
+        try {
+          const count = await this.db.getRepository('appointments').count({ filter: { customerId, status: 'completed' } });
+          await this.db.getRepository('customers').update({ filterByTk: customerId, values: { visitCount: count }, hooks: false });
+        } catch (error) {
+          this.app.logger.error(error);
+        }
+      };
+      if (options?.transaction?.afterCommit) options.transaction.afterCommit(run);
+      else run();
+    };
+    this.db.on('appointments.afterSave', (model: any, options: any) => {
+      recount(model.get('customerId'), options);
+      const previous = model.previous?.('customerId');
+      if (previous && String(previous) !== String(model.get('customerId'))) recount(previous, options);
+    });
+    this.db.on('appointments.afterDestroy', (model: any, options: any) => recount(model.get('customerId'), options));
+  }
 
   async load() {
     const server = process.env.AZURE_SQL_SERVER;
