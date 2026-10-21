@@ -7,9 +7,11 @@ import {
   bindingsCollection,
   ClerkErrorCode,
   defaultAuthenticatorName,
+  invitationsCollection,
   linksCollection,
   namespace,
 } from '../constants';
+import { staffInvitationActions } from './actions/staff-invitations';
 import { staffLinkActions } from './actions/staff-links';
 import { createClerkApi } from './clerk-api';
 import type { ClerkApi } from './clerk-api';
@@ -18,15 +20,21 @@ import type { ClerkServices } from './clerk-auth';
 import { readClerkConfig } from './config';
 import type { ConfigResult } from './config';
 import { ClerkAuthError } from './errors';
+import { StaffInvitations } from './invitations';
 import sessionBindingsCollection from './schema/clerk-session-bindings';
+import staffInvitationsCollection from './schema/clerk-staff-invitations';
 import staffLinksCollection from './schema/clerk-staff-links';
 import { StaffAccess } from './staff-access';
+
+/** The only invitation actions that exist; NocoBase's generic CRUD on the table is refused. */
+const INVITATION_ADMIN_ACTIONS = ['list', 'create', 'resend', 'revoke'];
 
 export class PluginAuthClerkServer extends Plugin {
   private configResult: ConfigResult;
   private clerkApi?: ClerkApi;
   private cache: Cache;
   staffAccess: StaffAccess;
+  invitations: StaffInvitations;
 
   /** Re-reads CLERK_* environment variables (they are otherwise read once at load). */
   reloadConfig() {
@@ -55,7 +63,15 @@ export class PluginAuthClerkServer extends Plugin {
       config: () => this.configResult,
       clerkApi: () => this.getClerkApi(),
       staffAccess: this.staffAccess,
+      invitations: this.invitations,
     };
+  }
+
+  private requireConfig() {
+    if (this.configResult.ok === false) {
+      throw new ClerkAuthError(503, ClerkErrorCode.NOT_CONFIGURED, 'Staff sign-in is not configured on the server.');
+    }
+    return this.configResult.config;
   }
 
   /**
@@ -64,7 +80,7 @@ export class PluginAuthClerkServer extends Plugin {
    * NocoBase's `db.import` (including `origin`).
    */
   async beforeLoad() {
-    for (const definition of [staffLinksCollection, sessionBindingsCollection]) {
+    for (const definition of [staffLinksCollection, sessionBindingsCollection, staffInvitationsCollection]) {
       this.db.collection({ ...definition, origin: namespace });
     }
   }
@@ -81,16 +97,14 @@ export class PluginAuthClerkServer extends Plugin {
       db: this.db,
       cache: this.cache,
       logger: this.app.logger,
-      getConfig: () => {
-        if (this.configResult.ok === false) {
-          throw new ClerkAuthError(
-            503,
-            ClerkErrorCode.NOT_CONFIGURED,
-            'Staff sign-in is not configured on the server.',
-          );
-        }
-        return this.configResult.config;
-      },
+      getConfig: () => this.requireConfig(),
+      getClerkApi: () => this.getClerkApi(),
+    });
+    this.invitations = new StaffInvitations({
+      db: this.db,
+      logger: this.app.logger,
+      staffAccess: this.staffAccess,
+      getConfig: () => this.requireConfig(),
       getClerkApi: () => this.getClerkApi(),
     });
 
@@ -111,11 +125,32 @@ export class PluginAuthClerkServer extends Plugin {
       [`${linksCollection}:lookupClerkUsers`]: actions.lookupClerkUsers,
       [`${linksCollection}:configStatus`]: actions.configStatus,
     });
+    const invitationActions = staffInvitationActions(() => this.services);
+    this.app.resourceManager.registerActionHandlers({
+      [`${invitationsCollection}:list`]: invitationActions.list,
+      [`${invitationsCollection}:create`]: invitationActions.create,
+      [`${invitationsCollection}:resend`]: invitationActions.resend,
+      [`${invitationsCollection}:revoke`]: invitationActions.revoke,
+      [`${invitationsCollection}:accept`]: invitationActions.accept,
+    });
     this.app.acl.registerSnippet({
       name: aclSnippet,
-      actions: [`${linksCollection}:*`],
+      actions: [`${linksCollection}:*`, `${invitationsCollection}:*`],
     });
+    // Invited staff have no NocoBase session yet; `accept` authenticates with the Clerk session token.
+    this.app.acl.allow(invitationsCollection, 'accept', 'public');
     this.app.acl.use(this.adminOnlyResources(), { tag: 'auth-clerk-admin-only', before: 'allow-manager' });
+
+    // Installs made before invitations existed have no invitations table, and this repo's Docker/EC2
+    // deployments run `yarn start` (no `nocobase upgrade`). Create only this plugin's missing table;
+    // nothing existing is altered.
+    this.app.on('beforeStart', async () => {
+      const collection = this.db.getCollection(invitationsCollection);
+      if (collection && !(await collection.existsInDb())) {
+        await collection.sync();
+        this.app.logger.info(`auth-clerk: created the ${invitationsCollection} table`);
+      }
+    });
 
     const clearAccess = async (link: any) => this.staffAccess.clearAccessCache(link.get('userId'));
     this.db.on(`${linksCollection}.afterSave`, clearAccess);
@@ -137,14 +172,23 @@ export class PluginAuthClerkServer extends Plugin {
   private adminOnlyResources() {
     return async (ctx: any, next: () => Promise<any>) => {
       const resource = ctx.permission?.resourceName;
-      if (resource === linksCollection || resource === bindingsCollection) {
+      if (resource === invitationsCollection) {
+        const action = ctx.permission?.actionName;
+        if (action === 'accept') {
+          return next();
+        }
+        if (!INVITATION_ADMIN_ACTIONS.includes(action)) {
+          ctx.throw(403, 'No permissions');
+        }
+      }
+      if (resource === linksCollection || resource === bindingsCollection || resource === invitationsCollection) {
         const roles: string[] = ctx.state.currentRoles?.length
           ? ctx.state.currentRoles
           : [ctx.state.currentRole || 'anonymous'];
         const actionPath = `${resource}:${ctx.permission.actionName}`;
         const allowed =
           roles.includes('root') ||
-          (resource === linksCollection &&
+          (resource !== bindingsCollection &&
             roles.some((name) => (this.app.acl as any).getRole(name)?.snippetAllowed(actionPath) === true));
         if (!allowed) {
           ctx.throw(403, 'No permissions');

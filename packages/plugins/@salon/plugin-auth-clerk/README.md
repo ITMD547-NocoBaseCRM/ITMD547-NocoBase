@@ -10,11 +10,14 @@ the existing NocoBase password login stays available as the administrator fallba
   - `/signin` (legacy client; this app runs in `legacy-default` entry mode, so this is the default page)
   - `/v/signin` (modern client)
 - Admin page **Settings → Staff sign-in (Clerk)** (`/admin/settings/auth-clerk` and `/v/admin/settings/auth-clerk`)
-  to link, disable and unlink staff accounts.
+  to **invite staff**, link, disable and unlink staff accounts, and resend or revoke invitations.
+- Public invitation page **`/staff-invite`** (and `/v/staff-invite`) where invited staff create their Clerk
+  sign-in and choose their own password (see [Invitation-only registration](#invitation-only-registration)).
 
 The public welcome page (`@salon/plugin-welcome-page`, at `/`) links its **Staff Login** button to `/signin`,
 where this plugin's Staff sign-in tab appears. After a Clerk sign-in the user lands on `/admin`, the same
-dashboard the welcome page sends signed-in users to. This plugin itself does not add or change any routes.
+dashboard the welcome page sends signed-in users to. Apart from the public `/staff-invite` page, this plugin does
+not add or change any routes.
 
 ## How sign-in works
 
@@ -32,8 +35,9 @@ dashboard the welcome page sends signed-in users to. This plugin itself does not
    sessions (`sts`) and impersonation (`act`), and asks the Clerk Backend API that the session is still `active`.
 4. The verified Clerk user id (`sub`, e.g. `user_2abc…`) is looked up in `clerkStaffLinks`. Sign-in is refused
    unless the link exists and is enabled, the NocoBase user exists, and the user holds a staff role
-   (`CLERK_ALLOWED_ROLES`, default `admin,r_staff,r_receptionist`; the default `member` role is not enough;
-   `root` is never allowed). **Nothing in the request body is used.** Browser-supplied user ids, emails or roles
+   (`CLERK_ALLOWED_ROLES`, default `admin,r_staff,r_receptionist`; the default `member` role is not enough).
+   A user who holds `root` is always refused, even though NocoBase's root account also holds `admin`.
+   **Nothing in the request body is used.** Browser-supplied user ids, emails or roles
    are ignored. Accounts are never linked by matching email.
 5. The NocoBase session is created by `BaseAuth.signIn()` (normal token, cookies, token policy) and recorded in
    `clerkSessionBindings` together with the Clerk session id. Roles are only read, never written.
@@ -79,6 +83,8 @@ section in the root [`.env.example`](../../../../.env.example).
 | `CLERK_AUDIENCE` | server only | no | Require this `aud` (only if you customise the session token). |
 | `CLERK_ALLOWED_ROLES` | server only | no | Staff role names (default `admin,r_staff,r_receptionist`). |
 | `CLERK_SESSION_RECHECK_SECONDS` | server only | no | Clerk session recheck interval, min 30 (default 300). |
+| `CLERK_INVITE_REDIRECT_URL` | server only | no | Where invitation emails send new staff. Must be on a `CLERK_AUTHORIZED_PARTIES` origin. Default `<first authorized origin>/staff-invite`. |
+| `CLERK_INVITATION_EXPIRES_DAYS` | server only | no | Days an invitation link stays valid, 1–30 (default 7). |
 
 Put real values in `.env` locally (git-ignored) and in `/opt/parlour-crm/app/.env` (or AWS Secrets Manager /
 Parameter Store) in production. Restart NocoBase after changing them. Never paste the secret key into chat,
@@ -95,18 +101,24 @@ Use the **Development** instance (`pk_test_`/`sk_test_`) locally and a **Product
    credentials. Production needs your own Google OAuth client: in Google Cloud Console set the authorized
    redirect URI shown by Clerk (on your Frontend API domain, `…/v1/oauth_callback`) and the authorized JavaScript
    origin of your CRM.
-3. **Restrictions → Sign-up mode**: choose **Restricted** (invitation only) so random people cannot create Clerk
-   accounts. This is defence in depth: an unlinked Clerk account gets no CRM access either way.
+3. **Restrictions → Sign-up mode**: keep it on **Restricted**. Then the only way to create a Clerk account is an
+   invitation (from this plugin or the Dashboard), and Clerk still accepts invitation sign-ups in this mode. It is
+   defence in depth: an uninvited or unlinked Clerk account gets no CRM access either way.
 4. **Domains** (production): set the CRM's domain and create the DNS records Clerk lists (Frontend API
    `clerk.<your-domain>`). Clerk only redirects to this application's origins, and the widget additionally passes
    `allowedRedirectOrigins: [current origin]`.
-5. **Redirect URLs**: the widget always returns to the page it was opened on (`/signin` or `/v/signin`, keeping
-   `?redirect=`), including after Google. No extra paths are needed beyond the CRM origin(s) above.
-6. **Sessions**: the session token lifetime stays at the 60 s default. Session maximum lifetime and inactivity
+5. **Redirect URLs**: the sign-in widget always returns to the page it was opened on (`/signin` or `/v/signin`,
+   keeping `?redirect=`), including after Google. Invitation emails send people to `CLERK_INVITE_REDIRECT_URL`
+   (default `<CRM origin>/staff-invite`). The plugin passes that URL when it creates each invitation; the Dashboard
+   cannot set it. In production it must be on your Clerk application's domain (see Domains). No other paths are
+   needed.
+6. **Emails → Invitation** (optional): customise the invitation email template. The link in it is Clerk's and
+   carries the `__clerk_ticket` used by the sign-up.
+7. **Sessions**: the session token lifetime stays at the 60 s default. Session maximum lifetime and inactivity
    timeout are up to you; ending a Clerk session ends the CRM session within the recheck interval.
-7. If you add a Content-Security-Policy, allow your Frontend API host (scripts, connect, frames), `img.clerk.com`,
+8. If you add a Content-Security-Policy, allow your Frontend API host (scripts, connect, frames), `img.clerk.com`,
    and `challenges.cloudflare.com` (bot protection).
-8. Keep the session token claims default. Do **not** use a custom JWT template for this plugin (it requires `sid`).
+9. Keep the session token claims default. Do **not** use a custom JWT template for this plugin (it requires `sid`).
 
 ### Sharing Clerk identities with a future app
 
@@ -171,7 +183,84 @@ On Windows without Developer Mode, the NocoBase CLI cannot create symlinks for w
    (Password) enabled. Optionally sort `clerk` first so it is the default tab.
 5. In a private window, sign in as a linked staff member, check their pages and permissions, then sign out.
 
+## Invitation-only registration
+
+The recommended way to onboard staff. The administrator chooses the person's email **and** the existing NocoBase
+user they will be, Clerk handles registration and the password, and the CRM links the two only after the server
+has verified everything itself.
+
+### Workflow
+
+1. **Administrator:** Settings → Staff sign-in (Clerk) → **Invite staff**. Enter the staff email and pick the
+   existing NocoBase user. The server checks the user exists, holds a staff role, isn't `root` and isn't already
+   linked, and that no other pending invitation exists for that email or user. It then:
+   - stores the invitation (`clerkStaffInvitations`) with the target user and a random nonce. **The target user
+     is never sent to Clerk or the browser.**
+   - calls Clerk's `invitations.createInvitation()` with the email, `redirectUrl = CLERK_INVITE_REDIRECT_URL`,
+     `expiresInDays = CLERK_INVITATION_EXPIRES_DAYS`, and public metadata
+     `{ nocobaseInvitation: { id, nonce } }`. Clerk emails the invitation.
+2. **Invitee:** opens the link. Clerk verifies the ticket and redirects to `/staff-invite?__clerk_ticket=…`. That
+   page hosts Clerk's `<SignUp/>`, which reads the ticket, pre-fills the invited email (already verified by the
+   link) and asks the person to choose a password. Restricted sign-up mode allows this because the sign-up uses
+   an invitation ticket. If the link lands on `/signin` or `/v/signin` instead, the sign-in form forwards it to
+   the matching `/staff-invite` page.
+3. **Accept:** once the Clerk session is active, the page calls `POST /api/clerkStaffInvitations:accept` with
+   the Clerk session token in the `X-Clerk-Session-Token` header. The body and URL are ignored. The server:
+   1. verifies the token (signature, issuer, expiry, `azp`, `aud`) and that the session is `active`;
+   2. loads the Clerk user via the Backend API and reads `publicMetadata.nocobaseInvitation`. Clerk copies the
+      invitation's public metadata to the new account at sign-up, and only the Backend API can write public
+      metadata, so a browser cannot forge it;
+   3. requires the referenced invitation to exist with a **matching nonce** (constant-time compare);
+   4. refuses it if revoked (410) or expired (410). If it was already accepted by *this* Clerk account, it
+      returns success without changes; if by another account, it refuses with 409;
+   5. asks Clerk that **this invitation is `accepted`** (so the ticket sign-up really happened), that the invited
+      address is a **verified** email of the account, and that the account was **created after** the invitation;
+   6. re-checks the target user (exists, staff role, not `root`). **Roles are never added or changed.**
+   7. refuses conflicting links (409): the Clerk account linked to another user, or the user linked to another
+      Clerk account;
+   8. in one transaction, moves the invitation from `pending` to `accepted` (a conditional update, so concurrent
+      requests can't both win) and creates the `clerkStaffLinks` row.
+4. **Sign-in:** the page then runs the normal Clerk sign-in exchange (`auth:signIn`) and opens `/admin`. From
+   then on the person uses **Staff sign-in** on `/signin` like everyone else.
+
+An email address alone never links anything. A Clerk account that signed up without an invitation (blocked
+anyway in Restricted mode) or from someone else's invitation is refused.
+
+### Resend and revoke
+
+- **Resend:** revokes the previous Clerk invitation and sends a new one (new link, new expiry) for the same
+  email and NocoBase user. The old email link stops working. It works for pending and expired invitations.
+- **Revoke:** revokes the invitation in Clerk and marks it revoked here. Acceptance is refused even if Clerk
+  had already registered the account.
+- Accepted invitations are kept as an audit trail (who invited whom, when accepted, which Clerk account). To
+  remove access later, disable or unlink the staff link.
+
+Invitation management (`clerkStaffInvitations:list|create|resend|revoke`) requires the `pm.auth-clerk` settings
+permission (administrators). NocoBase's generic `get`/`update`/`destroy` on the invitations table are refused for
+everyone, so an invitation's status can only change through these actions. Only `accept` is public, and it is
+authenticated by the Clerk session token.
+
+### Existing installations
+
+Enabling the plugin creates the table on new installs. On installs that already had the plugin, it creates
+**only** the missing `clerkStaffInvitations` table at the next start. This repo's Docker/EC2 deployments run
+`yarn start` without `nocobase upgrade`. Nothing else in the schema changes.
+
+### Troubleshooting
+
+| Message on `/staff-invite` | Meaning |
+| --- | --- |
+| "Open this page from your invitation email" | No Clerk ticket in the URL and not signed in to Clerk. |
+| "…was not created from a staff invitation" | The Clerk account has no valid invitation reference (self sign-up, or a different account is signed in). Use "Use a different account". |
+| "This invitation has not been accepted in Clerk" | The account exists but Clerk did not record the invitation as accepted. Resend the invitation. |
+| "…revoked" / "…expired" | Ask the administrator to resend it. |
+| "…already linked…" | A conflicting link exists. An administrator must resolve it under Linked staff accounts. |
+| "Clerk already has an account or a pending invitation for this email" (admin) | Use **Link staff account** for people who already have a Clerk account, or revoke the pending invitation in the Clerk Dashboard. |
+
 ## Initial staff linking
+
+For people who **already have a Clerk account** (otherwise use [Invitation-only
+registration](#invitation-only-registration)).
 
 Linking is always an explicit administrator action, recorded with `createdBy`:
 
@@ -196,7 +285,8 @@ and `note`.
 ## Administrator fallback
 
 The built-in **Password** authenticator (`basic`) is unchanged. Keep it enabled and keep at least one
-administrator with a strong password who does not depend on Clerk. `root` can never sign in through Clerk. If
+administrator with a strong password who does not depend on Clerk. `root` (any user holding the root role) can
+never sign in through Clerk, be linked, or be invited. If
 Clerk is down or misconfigured, the Clerk tab shows an error and administrators use the Password tab.
 
 ## Rollback

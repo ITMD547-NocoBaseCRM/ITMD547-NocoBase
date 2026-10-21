@@ -1,5 +1,6 @@
 import { verifyToken } from '@clerk/backend';
 import { ClerkErrorCode } from '../constants';
+import type { ClerkApi } from './clerk-api';
 import type { ClerkConfig } from './config';
 import { ClerkAuthError } from './errors';
 
@@ -80,4 +81,36 @@ export async function verifyClerkSessionToken(
   if ((claims as any).act) throw invalid('impersonation session');
 
   return { clerkUserId, sessionId };
+}
+
+/**
+ * `verifyClerkSessionToken` plus a Backend API check that the session is still active: the token
+ * lives ~60s, so a sign-out or revocation inside that window must not be accepted.
+ */
+export async function verifyActiveClerkSession(
+  token: string | undefined,
+  config: ClerkConfig,
+  api: Pick<ClerkApi, 'getSessionStatus'>,
+): Promise<VerifiedClerkSession> {
+  const session = await verifyClerkSessionToken(token, config);
+  let status: string;
+  try {
+    status = await api.getSessionStatus(session.sessionId);
+  } catch (error: any) {
+    throw new ClerkAuthError(
+      503,
+      ClerkErrorCode.UNAVAILABLE,
+      'Clerk could not be reached. Try again, or use the administrator login.',
+      error?.message,
+    );
+  }
+  if (status !== 'active') {
+    throw new ClerkAuthError(
+      401,
+      ClerkErrorCode.SESSION_INACTIVE,
+      'Your Clerk session is no longer active. Please sign in again.',
+      status,
+    );
+  }
+  return session;
 }

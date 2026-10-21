@@ -1,3 +1,4 @@
+import { invitePagePath } from '../constants';
 import { issuerFromPublishableKey } from './publishable-key';
 
 /**
@@ -20,6 +21,9 @@ export type ClerkConfig = {
   /** How often an issued NocoBase session re-confirms that its Clerk session is still active. */
   sessionRecheckMs: number;
   clockSkewMs: number;
+  /** Where Clerk sends invited staff (the public CRM page that hosts Clerk's sign-up). */
+  inviteRedirectUrl: string;
+  invitationTtlDays: number;
 };
 
 export type ConfigResult = { ok: true; config: ClerkConfig } | { ok: false; problems: string[] };
@@ -66,6 +70,24 @@ export function readClerkConfig(env: NodeJS.ProcessEnv = process.env): ConfigRes
     problems.push('CLERK_SESSION_RECHECK_SECONDS must be a number >= 30');
   }
 
+  // The invitation link must come back to this CRM: only an authorized origin is accepted.
+  const inviteRedirectUrl =
+    (env.CLERK_INVITE_REDIRECT_URL || '').trim() ||
+    (authorizedParties[0] ? `${authorizedParties[0]}${invitePagePath}` : '');
+  try {
+    const url = new URL(inviteRedirectUrl);
+    if (!authorizedParties.includes(url.origin)) {
+      problems.push('CLERK_INVITE_REDIRECT_URL must be on one of the CLERK_AUTHORIZED_PARTIES origins');
+    }
+  } catch {
+    if (authorizedParties.length) problems.push('CLERK_INVITE_REDIRECT_URL is not a valid absolute URL');
+  }
+
+  const invitationTtlDays = Number(env.CLERK_INVITATION_EXPIRES_DAYS ?? 7);
+  if (!Number.isInteger(invitationTtlDays) || invitationTtlDays < 1 || invitationTtlDays > 30) {
+    problems.push('CLERK_INVITATION_EXPIRES_DAYS must be a whole number from 1 to 30');
+  }
+
   if (problems.length) {
     return { ok: false, problems };
   }
@@ -81,6 +103,8 @@ export function readClerkConfig(env: NodeJS.ProcessEnv = process.env): ConfigRes
       allowedRoles,
       sessionRecheckMs: recheckSeconds * 1000,
       clockSkewMs: 5000,
+      inviteRedirectUrl,
+      invitationTtlDays,
     },
   };
 }

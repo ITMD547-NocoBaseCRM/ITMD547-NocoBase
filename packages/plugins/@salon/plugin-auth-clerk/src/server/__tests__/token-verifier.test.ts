@@ -94,6 +94,24 @@ describe('readClerkConfig', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('sends invitations back to the CRM invitation page by default', () => {
+    expect(config().inviteRedirectUrl).toBe(`${ORIGIN}/staff-invite`);
+    expect(config({ CLERK_INVITE_REDIRECT_URL: `${ORIGIN}/v/staff-invite` }).inviteRedirectUrl).toBe(
+      `${ORIGIN}/v/staff-invite`,
+    );
+    expect(config().invitationTtlDays).toBe(7);
+  });
+
+  it('refuses an invitation redirect outside the authorized origins', () => {
+    const result = readClerkConfig({
+      ...clerkEnv(keys.publicPem),
+      CLERK_INVITE_REDIRECT_URL: 'https://evil.example/x',
+    });
+    expect(result.ok).toBe(false);
+    const ttl = readClerkConfig({ ...clerkEnv(keys.publicPem), CLERK_INVITATION_EXPIRES_DAYS: '90' });
+    expect(ttl.ok).toBe(false);
+  });
+
   it('defaults to the salon staff roles and never allows root', () => {
     expect(config().allowedRoles).toEqual(['admin', 'r_staff', 'r_receptionist']);
     expect(config({ CLERK_ALLOWED_ROLES: 'root,r_staff' }).allowedRoles).toEqual(['r_staff']);

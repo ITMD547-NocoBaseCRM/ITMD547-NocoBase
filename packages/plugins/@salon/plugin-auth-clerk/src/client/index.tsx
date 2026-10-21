@@ -2,7 +2,7 @@ import { Plugin, useAPIClient } from '@nocobase/client';
 import PluginAuthClient from '@nocobase/plugin-auth/client';
 import React, { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
-import { aclSnippet, authType, namespace } from '../constants';
+import { aclSnippet, authType, invitePagePath, namespace } from '../constants';
 import type { ClerkAuthenticator } from '../client-v2/shared/ClerkSignInForm';
 
 // Lazy so the Clerk SDK only loads when the Clerk tab is rendered.
@@ -33,6 +33,13 @@ export class PluginAuthClerkClient extends Plugin {
       icon: 'TeamOutlined',
       aclSnippet,
       componentLoader: () => import('./StaffLinksSettings'),
+    });
+
+    // Public page Clerk invitation emails return to (/staff-invite).
+    this.app.router.add('staffInvite', {
+      path: invitePagePath,
+      skipAuthCheck: true,
+      componentLoader: () => import('./AcceptInvitationRoute'),
     });
   }
 }

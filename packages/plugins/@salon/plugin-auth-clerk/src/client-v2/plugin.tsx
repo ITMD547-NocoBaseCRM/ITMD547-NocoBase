@@ -1,6 +1,6 @@
 import { Plugin } from '@nocobase/client-v2';
 import PluginAuthClientV2 from '@nocobase/plugin-auth/client-v2';
-import { aclSnippet, authType } from '../constants';
+import { aclSnippet, authType, invitePagePath } from '../constants';
 
 /**
  * Modern client (`/v/...`): adds the Clerk tab to `/v/signin` and the staff-link settings page at
@@ -26,6 +26,13 @@ export class PluginAuthClerkClientV2 extends Plugin {
       title: this.t('Linked staff accounts'),
       aclSnippet,
       componentLoader: () => import('./pages/StaffLinksSettings'),
+    });
+
+    // Public page Clerk invitation emails return to (/v/staff-invite).
+    this.router.add('staffInvite', {
+      path: invitePagePath,
+      skipAuthCheck: true,
+      componentLoader: () => import('./pages/AcceptInvitationRouteV2'),
     });
   }
 }

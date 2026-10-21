@@ -3,18 +3,20 @@ import { ClerkErrorCode, tokenHeader } from '../constants';
 import type { ClerkApi } from './clerk-api';
 import type { ConfigResult } from './config';
 import { ClerkAuthError } from './errors';
+import type { StaffInvitations } from './invitations';
 import type { StaffAccess } from './staff-access';
-import { verifyClerkSessionToken } from './token-verifier';
+import { verifyActiveClerkSession } from './token-verifier';
 import type { VerifiedClerkSession } from './token-verifier';
 
 export type ClerkServices = {
   config: () => ConfigResult;
   clerkApi: () => ClerkApi;
   staffAccess: StaffAccess;
+  invitations: StaffInvitations;
 };
 
 /** An error carrying only what the browser may see (no `reason`). */
-function publicError(error: ClerkAuthError) {
+export function publicError(error: ClerkAuthError) {
   const result: any = new Error(error.message);
   result.status = error.status;
   result.code = error.code;
@@ -50,27 +52,11 @@ export abstract class ClerkAuth extends BaseAuth {
       );
     }
     try {
-      const session = await verifyClerkSessionToken(this.ctx.get(tokenHeader), configResult.config);
-      // The token is valid for ~60s; make sure the session was not signed out or revoked in that window.
-      let status: string;
-      try {
-        status = await this.services.clerkApi().getSessionStatus(session.sessionId);
-      } catch (error: any) {
-        throw new ClerkAuthError(
-          503,
-          ClerkErrorCode.UNAVAILABLE,
-          'Clerk could not be reached. Try again, or use the administrator login.',
-          error?.message,
-        );
-      }
-      if (status !== 'active') {
-        throw new ClerkAuthError(
-          401,
-          ClerkErrorCode.SESSION_INACTIVE,
-          'Your Clerk session is no longer active. Please sign in again.',
-          status,
-        );
-      }
+      const session = await verifyActiveClerkSession(
+        this.ctx.get(tokenHeader),
+        configResult.config,
+        this.services.clerkApi(),
+      );
       const { user } = await this.services.staffAccess.resolveLinkedUser(session.clerkUserId);
       this.verifiedSession = session;
       return user;

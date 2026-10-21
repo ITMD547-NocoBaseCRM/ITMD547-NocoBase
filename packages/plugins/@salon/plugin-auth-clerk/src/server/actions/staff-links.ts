@@ -123,6 +123,8 @@ export function staffLinkActions(getServices: () => ClerkServices) {
               allowedRoles: result.config.allowedRoles,
               networklessVerification: !!result.config.jwtKey,
               sessionRecheckSeconds: result.config.sessionRecheckMs / 1000,
+              inviteRedirectUrl: result.config.inviteRedirectUrl,
+              invitationTtlDays: result.config.invitationTtlDays,
             }
           : { configured: false, problems: result.problems };
       await next();

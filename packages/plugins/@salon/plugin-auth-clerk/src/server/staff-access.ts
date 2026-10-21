@@ -78,6 +78,15 @@ export class StaffAccess {
 
   async assertStaffRole(userId: number) {
     const { allowedRoles } = this.deps.getConfig();
+    // The bootstrap superuser stays on the password login, whatever other roles it also holds.
+    const rootRole = await this.deps.db.getRepository('rolesUsers').count({ filter: { userId, roleName: 'root' } });
+    if (rootRole) {
+      throw denied(
+        ClerkErrorCode.NO_STAFF_ROLE,
+        'This account must use the administrator password sign-in.',
+        `user ${userId} holds the root role`,
+      );
+    }
     const staffRoles = await this.deps.db.getRepository('rolesUsers').count({
       filter: { userId, roleName: { $in: allowedRoles } },
     });

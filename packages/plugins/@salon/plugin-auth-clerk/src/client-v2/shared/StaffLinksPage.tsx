@@ -10,7 +10,6 @@ import {
   Modal,
   Popconfirm,
   Radio,
-  Select,
   Space,
   Switch,
   Table,
@@ -20,10 +19,11 @@ import {
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { linksCollection, namespace } from '../../constants';
-import type { ApiClientLike } from './ClerkSignInForm';
+import { errorText, roleTitle, UserPicker, userLabel } from './admin-common';
+import type { NocoUser } from './admin-common';
+import type { ApiClientLike } from './clerk-common';
+import { StaffInvitationsPanel } from './StaffInvitationsPanel';
 
-type Role = { name: string; title?: string };
-type NocoUser = { id: number; nickname?: string; username?: string; email?: string; roles?: Role[] };
 type Link = {
   id: number;
   clerkUserId: string;
@@ -42,12 +42,10 @@ type ConfigStatus =
       allowedRoles: string[];
       networklessVerification: boolean;
       sessionRecheckSeconds: number;
+      inviteRedirectUrl: string;
+      invitationTtlDays: number;
     }
   | { configured: false; problems: string[] };
-
-const errorText = (error: any) => error?.response?.data?.errors?.[0]?.message || error?.message || String(error);
-const roleTitle = (role: Role) => (role.title && !role.title.startsWith('{{') ? role.title : role.name);
-const userLabel = (user?: NocoUser) => (user ? user.nickname || user.username || user.email || `#${user.id}` : '');
 
 function LinkModal(props: {
   api: ApiClientLike;
@@ -62,7 +60,6 @@ function LinkModal(props: {
   const [searching, setSearching] = useState(false);
   const [clerkUsers, setClerkUsers] = useState<ClerkUser[] | null>(null);
   const [clerkUserId, setClerkUserId] = useState<string>();
-  const [users, setUsers] = useState<NocoUser[]>([]);
   const [userId, setUserId] = useState<number>();
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,23 +75,6 @@ function LinkModal(props: {
       setError('');
     }
   }, [open]);
-
-  const searchUsers = useCallback(
-    async (text = '') => {
-      const filter = text
-        ? {
-            $or: [{ nickname: { $includes: text } }, { username: { $includes: text } }, { email: { $includes: text } }],
-          }
-        : undefined;
-      const res = await api.request({ url: 'users:list', params: { pageSize: 50, appends: ['roles'], filter } });
-      setUsers(res?.data?.data || []);
-    },
-    [api],
-  );
-
-  useEffect(() => {
-    if (open) searchUsers().catch((e) => setError(errorText(e)));
-  }, [open, searchUsers]);
 
   const lookup = async () => {
     setError('');
@@ -114,9 +94,6 @@ function LinkModal(props: {
       setSearching(false);
     }
   };
-
-  const selectedUser = users.find((user) => user.id === userId);
-  const hasStaffRole = !selectedUser || (selectedUser.roles || []).some((role) => allowedRoles.includes(role.name));
 
   const submit = async () => {
     setError('');
@@ -184,29 +161,8 @@ function LinkModal(props: {
         <Typography.Text type="secondary">
           {t('Accounts are never matched by email automatically. Confirm this is the same person.')}
         </Typography.Text>
-        <Select
-          showSearch
-          filterOption={false}
-          onSearch={(text) => searchUsers(text).catch((e) => setError(errorText(e)))}
-          value={userId}
-          onChange={setUserId}
-          placeholder={t('Search users')}
-          style={{ width: '100%' }}
-          options={users.map((user) => ({
-            value: user.id,
-            label: `${userLabel(user)}${user.email ? ` <${user.email}>` : ''} — ${(user.roles || [])
-              .map(roleTitle)
-              .join(', ')}`,
-          }))}
-        />
-        {!hasStaffRole ? (
-          <Alert
-            type="warning"
-            showIcon
-            message={t(
-              'This user has no staff role yet, so Clerk sign-in will be refused until an administrator assigns one.',
-            )}
-          />
+        {open ? (
+          <UserPicker api={api} value={userId} onChange={setUserId} onError={setError} allowedRoles={allowedRoles} />
         ) : null}
         <Input.TextArea
           placeholder={t('Note (optional)')}
@@ -394,6 +350,16 @@ export function StaffLinksPage({ api }: { api: ApiClientLike }) {
           load();
         }}
       />
+      <div style={{ marginTop: 32 }}>
+        <StaffInvitationsPanel
+          api={api}
+          configured={!!status?.configured}
+          allowedRoles={allowedRoles}
+          inviteRedirectUrl={status?.configured ? status.inviteRedirectUrl : undefined}
+          invitationTtlDays={status?.configured ? status.invitationTtlDays : undefined}
+          onChanged={load}
+        />
+      </div>
     </Card>
   );
 }

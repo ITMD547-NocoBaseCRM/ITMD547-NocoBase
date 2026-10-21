@@ -6,6 +6,13 @@ export const defaultAuthenticatorName = 'clerk';
 
 export const linksCollection = 'clerkStaffLinks';
 export const bindingsCollection = 'clerkSessionBindings';
+export const invitationsCollection = 'clerkStaffInvitations';
+
+/** Public page (both clients) where invited staff finish their Clerk registration. */
+export const invitePagePath = '/staff-invite';
+
+/** Key under the Clerk user's public metadata that carries the invitation reference. */
+export const invitationMetadataKey = 'nocobaseInvitation';
 
 /**
  * The short-lived Clerk session token travels in this header, never in the request body or URL:
@@ -24,4 +31,10 @@ export const ClerkErrorCode = {
   LINK_DISABLED: 'CLERK_LINK_DISABLED',
   NO_STAFF_ROLE: 'CLERK_NO_STAFF_ROLE',
   UNAVAILABLE: 'CLERK_UNAVAILABLE',
+  NOT_INVITED: 'CLERK_NOT_INVITED',
+  INVITATION_REVOKED: 'CLERK_INVITATION_REVOKED',
+  INVITATION_EXPIRED: 'CLERK_INVITATION_EXPIRED',
+  INVITATION_USED: 'CLERK_INVITATION_USED',
+  INVITATION_NOT_ACCEPTED: 'CLERK_INVITATION_NOT_ACCEPTED',
+  LINK_CONFLICT: 'CLERK_LINK_CONFLICT',
 } as const;
