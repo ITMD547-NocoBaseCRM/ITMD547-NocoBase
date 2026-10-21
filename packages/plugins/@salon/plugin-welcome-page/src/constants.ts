@@ -1,2 +1,2 @@
 export const namespace = '@salon/plugin-welcome-page';
-export const brandName = 'Beautywithin CRM';
+export const brandName = 'BeautyWithin';
