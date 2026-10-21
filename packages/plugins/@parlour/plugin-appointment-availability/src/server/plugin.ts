@@ -96,6 +96,9 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
 
   private async validateAppointment(model: any) {
     const values = model.get ? model.get() : model;
+    const isExisting = values.id != null;
+    const schedulingChanged = !isExisting || ['staffId', 'startTime', 'endTime'].some((field) => model.changed?.(field));
+    if (!schedulingChanged) return;
     if (!values.staffId || ['cancelled', 'noShow'].includes(values.status)) return;
     try {
       await this.availability.assertAvailable({

@@ -6,7 +6,7 @@
 // use the activity columns on customers (visitCount, firstVisitAt, lastVisitAt, totalSpent, visitsLastNm), which are
 // kept up to date from completed appointments and payments. Their definitions are injected below from
 // scripts/customer-activity-rules.js so the toolbar, the tests and the documentation share one source.
-const CFG = {"collection":"customers","table":"","noun":"Customers","search":{"fields":["firstName","lastName","email","phone"],"placeholder":"Search customer name, email or phone"},"selects":[{"field":"status","placeholder":"All statuses"}],"dateRange":{"field":"createdAt","label":"Customer since"},"kpis":[{"label":"Active","select":"status","value":"active","color":"#16a34a"},{"label":"Prospect","select":"status","value":"prospect","color":"#2563eb"},{"label":"Inactive","select":"status","value":"inactive","color":"#ea580c"},{"label":"Blocked","select":"status","value":"blocked","color":"#dc2626"}],"activityKpis":[{"label":"Never visited","activity":"never","color":"#6b7280"},{"label":"Inactive","activity":"inactive","color":"#ea580c"},{"label":"At risk","activity":"atRisk","color":"#dc2626"},{"label":"New","activity":"new","color":"#16a34a"}],"columns":[{"key":"firstName","label":"First name"},{"key":"lastName","label":"Last name"},{"key":"email","label":"Email"},{"key":"phone","label":"Phone"},{"key":"dateOfBirth","label":"Date of birth"},{"key":"address","label":"Address"},{"key":"status","label":"Status"},{"key":"notes","label":"Notes"},{"key":"createdAt","label":"Customer since","readOnly":true},{"key":"visitCount","label":"Completed visits","readOnly":true},{"key":"lastVisitAt","label":"Last visit","readOnly":true,"format":"datetime"},{"key":"firstVisitAt","label":"First visit","readOnly":true,"format":"datetime"},{"key":"totalSpent","label":"Total spent","readOnly":true}]};
+const CFG = {"collection":"customers","table":"","noun":"Customers","search":{"fields":["firstName","lastName","email","phone"],"placeholder":"Search customer name, email or phone"},"selects":[{"field":"status","placeholder":"All statuses"}],"dateRange":{"field":"createdAt","label":"Customer since"},"kpis":[{"label":"Active","select":"status","value":"active","color":"#16a34a"}],"activityKpis":[{"label":"At Risk","activity":"atRisk","color":"#dc2626"}],"columns":[{"key":"firstName","label":"First name"},{"key":"lastName","label":"Last name"},{"key":"email","label":"Email"},{"key":"phone","label":"Phone"},{"key":"address","label":"Address"},{"key":"status","label":"Status"},{"key":"createdAt","label":"Customer since","readOnly":true},{"key":"visitCount","label":"Completed visits","readOnly":true},{"key":"lastVisitAt","label":"Last visit","readOnly":true,"format":"datetime"},{"key":"firstVisitAt","label":"First visit","readOnly":true,"format":"datetime"},{"key":"totalSpent","label":"Total spent","readOnly":true}]};
 /*CUSTOMER_ACTIVITY_RULES*/
 let CAN_IMPORT = true;
 try {
@@ -19,7 +19,7 @@ try {
 
 const React = ctx.React; const antd = ctx.antd; const dayjs = ctx.dayjs;
 const { useState, useEffect, useRef } = React;
-const { Input, Select, DatePicker, Button, Space, Upload, message, Tooltip, Modal, Radio, Checkbox, Alert, Tag } = antd;
+const { Input, Select, DatePicker, Button, Space, Upload, message, Tooltip, Modal, Radio, Checkbox, Alert, Tag, Popover, Dropdown, Tabs } = antd;
 const h = React.createElement;
 const clean = (s) => String(s ?? '').replace(/^\{\{\s*t\(\s*["'](.*)["']\s*\)\s*\}\}$/, '$1');
 // Resolve the customers table on this page dynamically so the toolbar survives block uid changes. CFG.table is a last resort.
@@ -56,6 +56,18 @@ const BDAY_OPTS = [
   { value: 'month', label: 'Birthdays this month' },
   { value: 'all', label: 'All, by upcoming birthday' },
 ];
+const SAVED_VIEW_COLLECTION = 'customerSavedViews';
+const PRESET_VIEWS = [
+  { key: 'all', name: 'All customers', state: {} },
+  { key: 'active', name: 'Active', state: { sel: { status: 'active' } } },
+  { key: 'inactive', name: 'Inactive 3+ months', state: { activity: 'inactive', months: 3 } },
+  { key: 'risk', name: 'At risk', state: { activity: 'atRisk', months: 3 } },
+];
+const packState = (state) => ({ ...state, range: state.range && state.range[0] && state.range[1] ? [state.range[0].toISOString(), state.range[1].toISOString()] : null });
+const unpackState = (value) => {
+  const raw = typeof value === 'string' ? JSON.parse(value || '{}') : (value || {});
+  return { ...initialState(), ...raw, sel: { ...(raw.sel || {}) }, range: raw.range && raw.range.length === 2 ? [dayjs(raw.range[0]), dayjs(raw.range[1])] : null };
+};
 const mmdd = (d) => (d.getMonth() + 1) * 100 + d.getDate();
 function bdayFilter(v) {
   if (!v) return null;
@@ -116,6 +128,8 @@ function RichEditor({ html, onChange, placeholder }) {
   const fileRef = useRef();
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+  const [imageUrlOpen, setImageUrlOpen] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const savedRange = useRef(null);
   useEffect(() => { if (ref.current && ref.current.innerHTML !== (html || '')) ref.current.innerHTML = html || ''; }, []);
@@ -139,6 +153,17 @@ function RichEditor({ html, onChange, placeholder }) {
     } catch (e) { message.error('Image upload failed: ' + errText(e)); } finally { setUploading(false); }
   };
   const applyLink = () => { const url = linkUrl.trim(); setLinkOpen(false); if (!url) return; ref.current.focus(); restoreRange(); doc().execCommand('createLink', false, /^https?:\/\//.test(url) ? url : 'https://' + url); emit(); setLinkUrl(''); };
+  const applyImageUrl = () => {
+    const value = imageUrl.trim();
+    if (!value) return;
+    let parsed;
+    try { parsed = new URL(value); } catch (e) { message.error('Enter a valid image URL.'); return; }
+    if (parsed.protocol !== 'https:') { message.error('Use a public HTTPS image URL so email clients can load it.'); return; }
+    setImageUrlOpen(false);
+    ref.current.focus(); restoreRange();
+    doc().execCommand('insertHTML', false, '<img src="' + escapeHtml(parsed.href) + '" alt="Offer image" style="max-width:100%;height:auto;display:block;margin:8px 0" />');
+    emit(); setImageUrl('');
+  };
   const tb = (label, title, onClick, extra = {}) => h(Button, { key: title, size: 'small', title, 'aria-label': title, onMouseDown: (e) => e.preventDefault(), onClick, ...extra }, label);
   const toolbar = h('div', { style: { display: 'flex', gap: 4, flexWrap: 'wrap', padding: 6, borderBottom: '1px solid #e5e7eb', background: '#fafafa', borderRadius: '6px 6px 0 0' } },
     tb(h('b', null, 'B'), 'Bold', () => exec('bold')),
@@ -149,13 +174,18 @@ function RichEditor({ html, onChange, placeholder }) {
     tb('• List', 'Bullet list', () => exec('insertUnorderedList')),
     tb('1. List', 'Numbered list', () => exec('insertOrderedList')),
     tb('Link', 'Insert link', () => { saveRange(); setLinkOpen(true); }),
-    tb(uploading ? 'Uploading…' : 'Image', 'Insert image', () => { saveRange(); fileRef.current && fileRef.current.click(); }, { loading: uploading }),
+    tb('Image URL', 'Insert image from a public HTTPS URL', () => { saveRange(); setImageUrlOpen(true); }),
+    tb(uploading ? 'Uploading…' : 'Upload', 'Upload image to NocoBase', () => { saveRange(); fileRef.current && fileRef.current.click(); }, { loading: uploading }),
     tb('Clear', 'Remove formatting', () => exec('removeFormat')),
     h('input', { key: 'file', ref: fileRef, type: 'file', accept: 'image/*', style: { display: 'none' }, onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; insertImage(f); } }),
     linkOpen && h('span', { key: 'link', style: { display: 'inline-flex', gap: 4, alignItems: 'center', marginLeft: 6 } },
       h(Input, { size: 'small', autoFocus: true, placeholder: 'https://', value: linkUrl, onChange: (e) => setLinkUrl(e.target.value), onPressEnter: applyLink, style: { width: 220 } }),
       h(Button, { size: 'small', type: 'primary', onClick: applyLink }, 'Add'),
-      h(Button, { size: 'small', onClick: () => setLinkOpen(false) }, 'Cancel')));
+      h(Button, { size: 'small', onClick: () => setLinkOpen(false) }, 'Cancel')),
+    imageUrlOpen && h('span', { key: 'image-url', style: { display: 'inline-flex', gap: 4, alignItems: 'center', marginLeft: 6 } },
+      h(Input, { size: 'small', autoFocus: true, placeholder: 'https://example.com/offer.jpg', value: imageUrl, onChange: (e) => setImageUrl(e.target.value), onPressEnter: applyImageUrl, style: { width: 300 } }),
+      h(Button, { size: 'small', type: 'primary', onClick: applyImageUrl }, 'Insert'),
+      h(Button, { size: 'small', onClick: () => { setImageUrlOpen(false); setImageUrl(''); } }, 'Cancel')));
   return h('div', { style: { border: '1px solid #d9d9d9', borderRadius: 6 } }, toolbar,
     h('div', { ref, contentEditable: true, suppressContentEditableWarning: true, role: 'textbox', 'aria-multiline': true, 'aria-label': 'Email message', 'data-placeholder': placeholder,
       onInput: emit, onBlur: emit, onKeyUp: saveRange, onMouseUp: saveRange,
@@ -298,6 +328,12 @@ function Toolbar() {
   const [loadError, setLoadError] = useState(null);
   const [msgOpen, setMsgOpen] = useState(false);
   const [msgSelected, setMsgSelected] = useState([]);
+  const [savedViews, setSavedViews] = useState([]);
+  const [activeView, setActiveView] = useState('all');
+  const [viewName, setViewName] = useState('');
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [savingView, setSavingView] = useState(false);
+  const [savedViewsAvailable, setSavedViewsAvailable] = useState(true);
   const timer = useRef(); const countTimer = useRef(); const dlRef = useRef();
   const stRef = useRef(st); stRef.current = st;
   const countSeq = useRef(0);     // drops count responses that arrive after a newer request
@@ -313,6 +349,50 @@ function Toolbar() {
     } catch (e) { console.error(e); }
   }, []);
 
+  // Keep these fields available for forms and birthday filtering, but remove their columns from the customer list.
+  useEffect(() => {
+    const hiddenLabels = new Set(['date of birth', 'notes', 'other skin profile', 'skin profile other', 'other skin sensitivities', 'skin sensitivities other']);
+    const hideColumns = () => {
+      for (const table of document.querySelectorAll('.ant-table table')) {
+        const headers = [...table.querySelectorAll('thead th')];
+        const hiddenIndexes = new Set();
+        headers.forEach((header, index) => {
+          const label = (header.textContent || '').trim().toLowerCase();
+          if (!hiddenLabels.has(label)) return;
+          hiddenIndexes.add(index);
+          header.style.display = 'none';
+          for (const row of table.querySelectorAll('tbody tr')) {
+            const cell = row.children[index];
+            if (cell) cell.style.display = 'none';
+          }
+        });
+        const dataIndexes = headers.map((header, index) => ({ header, index, label: (header.textContent || '').trim() }))
+          .filter(({ index, label }) => label && !hiddenIndexes.has(index));
+        if (!dataIndexes.length) continue;
+        table.style.width = '100%';
+        table.style.tableLayout = 'fixed';
+        const compactCount = headers.filter((header, index) => !hiddenIndexes.has(index) && !(header.textContent || '').trim()).length;
+        const equalWidth = 'calc((100% - ' + (compactCount * 48) + 'px) / ' + dataIndexes.length + ')';
+        const cols = [...table.querySelectorAll('colgroup col')];
+        headers.forEach((header, index) => {
+          const hidden = hiddenIndexes.has(index);
+          const compact = !(header.textContent || '').trim();
+          const width = hidden ? '0px' : compact ? '48px' : equalWidth;
+          header.style.width = width; header.style.maxWidth = width;
+          if (cols[index]) { cols[index].style.width = width; if (hidden) cols[index].style.display = 'none'; }
+          for (const row of table.querySelectorAll('tbody tr')) {
+            const cell = row.children[index];
+            if (cell && !hidden) { cell.style.width = width; cell.style.maxWidth = width; }
+          }
+        });
+      }
+    };
+    hideColumns();
+    const observer = new window.MutationObserver(hideColumns);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
   const enumOpts = (field) => (meta.fields[field]?.enum || meta.fields[field]?.uiSchema?.enum || []).map((e) => ({ value: e.value, label: clean(e.label) }));
   const selOptions = (s) => s.options ? s.options.map(([value, label]) => ({ value, label })) : enumOpts(s.field);
 
@@ -320,13 +400,16 @@ function Toolbar() {
   const refreshCounts = async (state) => {
     const seq = ++countSeq.current;
     const out = {};
-    const jobs = [req(CFG.collection + ':list', { pageSize: 1, filter: buildFilter(state) }).then((r) => { out.__view = r.meta?.count ?? 0; })];
+    const jobs = [
+      req(CFG.collection + ':list', { pageSize: 1, filter: buildFilter(state) }).then((r) => { out.__view = r.meta?.count ?? 0; }),
+      req(CFG.collection + ':list', { pageSize: 1 }).then((r) => { out.__total = r.meta?.count ?? 0; }),
+    ];
     (CFG.kpis || []).forEach((k) => {
-      const f = merge(buildFilter(state, { skipSelect: k.select }), { [k.select]: { $eq: k.value } });
+      const f = { [k.select]: { $eq: k.value } };
       jobs.push(req(CFG.collection + ':list', { pageSize: 1, filter: f }).then((r) => { out[k.label] = r.meta?.count ?? 0; }));
     });
     (CFG.activityKpis || []).forEach((k) => {
-      const f = merge(buildFilter(state, { skipActivity: true }), CUSTOMER_ACTIVITY.filter({ activity: k.activity, months: state.months, now: new Date() }));
+      const f = CUSTOMER_ACTIVITY.filter({ activity: k.activity, months: state.months, now: new Date() });
       jobs.push(req(CFG.collection + ':list', { pageSize: 1, filter: f }).then((r) => { out['activity:' + k.activity] = r.meta?.count ?? 0; }));
     });
     await Promise.all(jobs);
@@ -380,7 +463,60 @@ function Toolbar() {
     clearTimeout(timer.current);
     if (debounce) timer.current = setTimeout(() => apply(next), 350); else apply(next);
   };
-  const clearAll = () => { const n = initialState(); setSt(n); stRef.current = n; apply(n); };
+  const loadSavedViews = async () => {
+    try {
+      const r = await req(SAVED_VIEW_COLLECTION + ':list', { paginate: false, sort: ['position', 'createdAt'] });
+      const rows = (r.data || []).filter((v) => v.kind !== 'system');
+      setSavedViews(rows); setSavedViewsAvailable(true);
+      const current = rows.find((v) => v.isCurrent);
+      if (current) {
+        const next = unpackState(current.state);
+        setActiveView(String(current.id)); setSt(next); stRef.current = next; apply(next);
+      }
+    } catch (e) {
+      setSavedViewsAvailable(false);
+      console.warn('Saved customer views are unavailable:', errText(e));
+    }
+  };
+  useEffect(() => { loadSavedViews(); }, []);
+  const clearAll = () => { const n = initialState(); setActiveView('all'); setSt(n); stRef.current = n; apply(n); };
+  const chooseView = async (key) => {
+    const preset = PRESET_VIEWS.find((v) => v.key === key);
+    const saved = savedViews.find((v) => String(v.id) === String(key));
+    const next = preset ? { ...initialState(), ...preset.state, sel: { ...(preset.state.sel || {}) } } : unpackState(saved && saved.state);
+    setActiveView(String(key)); setSt(next); stRef.current = next; apply(next);
+    if (savedViewsAvailable) {
+      await Promise.all(savedViews.map((v) => ctx.api.request({ url: SAVED_VIEW_COLLECTION + ':update', method: 'post', params: { filterByTk: v.id }, data: { isCurrent: !!saved && v.id === saved.id } }).catch(() => null)));
+    }
+  };
+  const saveCurrentView = async () => {
+    const name = viewName.trim();
+    if (!name) { message.warning('Enter a view name'); return; }
+    setSavingView(true);
+    try {
+      await Promise.all(savedViews.filter((v) => v.isCurrent).map((v) => ctx.api.request({ url: SAVED_VIEW_COLLECTION + ':update', method: 'post', params: { filterByTk: v.id }, data: { isCurrent: false } })));
+      const r = await ctx.api.request({ url: SAVED_VIEW_COLLECTION + ':create', method: 'post', data: { name, kind: 'custom', state: packState(st), position: savedViews.length, isCurrent: true } });
+      const created = r.data && r.data.data;
+      setViewName(''); setViewModalOpen(false); message.success('Saved view “' + name + '”');
+      await loadSavedViews();
+      if (created && created.id) setActiveView(String(created.id));
+    } catch (e) { message.error('Could not save view: ' + errText(e)); }
+    finally { setSavingView(false); }
+  };
+  const deleteCurrentView = async () => {
+    const saved = savedViews.find((v) => String(v.id) === String(activeView));
+    if (!saved) return;
+    try {
+      await ctx.api.request({ url: SAVED_VIEW_COLLECTION + ':destroy', method: 'post', params: { filterByTk: saved.id } });
+      setSavedViews((rows) => rows.filter((v) => v.id !== saved.id));
+      chooseView('all'); message.success('Deleted saved view');
+    } catch (e) { message.error('Could not delete view: ' + errText(e)); }
+  };
+  const openNativeCreate = () => {
+    const root = document.body;
+    const button = [...root.querySelectorAll('button')].find((el) => !el.closest('[data-customer-toolbar]') && /^(add new|add customer|create)$/i.test((el.textContent || '').trim()));
+    if (button) button.click(); else message.info('Use the table’s Add new button below.');
+  };
 
   const fmt = (col, v) => {
     if (v == null) return '';
@@ -445,55 +581,64 @@ function Toolbar() {
     return false;
   };
 
-  const tile = (label, value, color, active, onClick) => h('div', { key: label, role: 'button', tabIndex: 0, 'aria-pressed': !!active, onClick, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }, style: { flex: '1 1 100px', minWidth: 96, border: '1px solid ' + (active ? '#94a3b8' : '#e5e7eb'), background: active ? '#f5f5f5' : '#fff', borderRadius: 8, padding: '10px 14px', cursor: 'pointer' } },
-    h('div', { style: { fontSize: 12, color: '#6b7280' } }, label),
-    h('div', { style: { fontSize: 20, fontWeight: 600, color: color || '#111827', marginTop: 2 } }, value ?? '–'));
-
-  const activityLabel = (key) => CUSTOMER_ACTIVITY.byKey(key).label(st.months);
-  const kpiRow = h('div', { key: 'kpis', style: { display: 'flex', gap: 10, flexWrap: 'wrap', paddingBottom: 14, borderBottom: '1px solid #f0f0f0', marginBottom: 14 } },
-    tile((CFG.noun || 'Records') + ' in view', counts.__view, null, st.activity === 'all' && !Object.values(st.sel).some((v) => v !== undefined && v !== null), () => update({ activity: 'all', sel: Object.fromEntries((CFG.kpis || []).map((k) => [k.select, undefined])) })),
-    ...(CFG.kpis || []).map((k) => tile(k.label, counts[k.label], k.color, st.sel[k.select] === k.value, () => update({ sel: { [k.select]: st.sel[k.select] === k.value ? undefined : k.value } }))),
-    ...(CFG.activityKpis || []).map((k) => tile(CUSTOMER_ACTIVITY.byKey(k.activity).period ? activityLabel(k.activity) : k.label, counts['activity:' + k.activity], k.color, st.activity === k.activity, () => update({ activity: st.activity === k.activity ? 'all' : k.activity }))));
-
-  // Every control sits in a labelled cell of the same height, so the two rows line up whatever the screen width.
-  // `flex` is "grow shrink basis": basis is the preferred width, cells wrap to the next line on narrow screens.
   const cell = (text, control, flex, extra = {}) => h('div', { key: text, style: { display: 'flex', flexDirection: 'column', gap: 4, flex, minWidth: 0, ...extra } },
     h('div', { style: { fontSize: 12, fontWeight: 600, color: '#374151', lineHeight: '18px', whiteSpace: 'nowrap' } }, text), control);
-  const row = (key, children) => h('div', { key, style: { display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 } }, ...children);
   const full = { width: '100%' };
   const periodEnabled = CUSTOMER_ACTIVITY.usesPeriod(st.activity, st.sort);
-
-  const generalRow = row('general', [
-    CFG.search && cell('Search', h(Input, { allowClear: true, placeholder: CFG.search.placeholder || 'Search', value: st.q, onChange: (e) => update({ q: e.target.value }, true), style: full, prefix: h('span', { style: { color: '#9ca3af' } }, '⌕'), 'aria-label': 'Search customers' }), '3 1 260px'),
-    ...(CFG.selects || []).map((s) => cell(s.label || 'Status', h(Select, { allowClear: true, showSearch: true, optionFilterProp: 'label', placeholder: s.placeholder, value: st.sel[s.field], options: selOptions(s), onChange: (v) => update({ sel: { [s.field]: v } }), style: full }), '1 1 150px')),
-    cell('Birthday', h(Select, { allowClear: true, placeholder: 'Any', value: st.bday, options: BDAY_OPTS, onChange: (v) => update({ bday: v }), style: full }), '1 1 190px'),
-    CFG.dateRange && cell(CFG.dateRange.label, h(DatePicker.RangePicker, { value: st.range, onChange: (v) => update({ range: v }), style: full }), '2 1 260px'),
-  ]);
-
-  const activityRow = row('activity', [
-    cell('Activity type', h(Select, { value: st.activity, options: CUSTOMER_ACTIVITY.options(st.months), onChange: (v) => update({ activity: v }), style: full, 'aria-label': 'Activity type' }), '3 1 260px'),
-    cell('Time period', h(Tooltip, { title: periodEnabled ? '' : 'This activity type does not use a time period' }, h(Select, { value: st.months, disabled: !periodEnabled, options: CUSTOMER_ACTIVITY.PERIODS, onChange: (v) => update({ months: v }), style: full, 'aria-label': 'Time period' })), '1 1 150px'),
-    cell('Sort by', h(Select, { value: st.sort, options: CUSTOMER_ACTIVITY.SORTS.map((s) => ({ value: s.value, label: s.label })), onChange: (v) => update({ sort: v }), style: full, 'aria-label': 'Sort by' }), '1 1 190px'),
-    cell(' ', h(Space, { wrap: true },
-      h(Button, { type: 'primary', ghost: true, onClick: () => { const t = getTable(); const rows = (t && t.resource && typeof t.resource.getSelectedRows === 'function' ? t.resource.getSelectedRows() : []) || []; setMsgSelected(rows); setMsgOpen(true); } }, 'Send message'),
-      h(Button, { onClick: clearAll }, 'Clear'),
-      CAN_IMPORT ? h(Upload, { accept: '.csv,text/csv', showUploadList: false, beforeUpload: importCSV }, h(Tooltip, { title: 'Headers must match the exported CSV' }, h(Button, { loading: busy }, 'Import CSV'))) : null,
-      h(Button, { onClick: exportCSV, loading: busy }, 'Export CSV')), '0 0 auto', { marginLeft: 'auto' }),
-  ]);
-
-  // What the current selection means, in words, plus the empty state. A polite live region so screen readers hear it.
-  const description = CUSTOMER_ACTIVITY.describe({ activity: st.activity, months: st.months, now: new Date(), formatDate: (d) => dayjs(d).format('D MMM YYYY') });
   const sortLabel = (CUSTOMER_ACTIVITY.SORTS.find((s) => s.value === st.sort) || {}).label;
-  let note = null;
-  if (loadError) note = loadError;
-  else if (counts.__view === 0) note = [st.activity === 'all' && !hasOtherFilters(st) ? 'No customers yet. Use Add new to create the first one.' : 'No customers match these filters. ', h(Button, { key: 'clear', type: 'link', size: 'small', onClick: clearAll, style: { padding: 0 } }, 'Clear filters')];
-  const statusLine = h('div', { key: 'desc', role: 'status', 'aria-live': 'polite', style: { padding: '10px 14px', borderRadius: 8, background: loadError ? '#fff1f0' : '#fafafa', border: '1px dashed ' + (loadError ? '#ffa39e' : '#d9d9d9'), color: '#4b5563', fontSize: 13 } },
-    h('div', null, h('strong', null, activityLabel(st.activity) + ': '), description, st.bday ? ' Sorted by upcoming birthday.' : sortLabel ? ' Sorted: ' + sortLabel.toLowerCase() + '.' : ''),
-    note && h('div', { style: { marginTop: 6 } }, note));
-
   const sendDialog = h(SendMessageDialog, { key: 'send', open: msgOpen, onClose: () => setMsgOpen(false), selected: msgSelected, viewFilter: buildFilter(st), viewCount: counts.__view });
 
-  return h('div', { style: { background: '#fff', border: '1px solid #f0f0f0', borderRadius: 8, padding: 16 } }, kpiRow, generalRow, activityRow, statusLine, sendDialog, h('a', { key: 'dl', ref: dlRef, style: { display: 'none' } }));
+  const filterCount = [st.sel.status, st.bday, st.range, st.activity !== 'all' ? st.activity : null].filter(Boolean).length;
+  const filterPanel = h('div', { style: { width: 420, maxWidth: 'calc(100vw - 48px)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } },
+    ...(CFG.selects || []).map((s) => cell(s.label || 'Status', h(Select, { allowClear: true, showSearch: true, optionFilterProp: 'label', placeholder: s.placeholder, value: st.sel[s.field], options: selOptions(s), onChange: (v) => update({ sel: { [s.field]: v } }), style: full }), '1')),
+    cell('Birthday', h(Select, { allowClear: true, placeholder: 'Any birthday', value: st.bday, options: BDAY_OPTS, onChange: (v) => update({ bday: v }), style: full }), '1'),
+    CFG.dateRange && cell(CFG.dateRange.label, h(DatePicker.RangePicker, { value: st.range, onChange: (v) => update({ range: v }), style: full }), '1', { gridColumn: '1 / -1' }),
+    cell('Activity type', h(Select, { value: st.activity, options: CUSTOMER_ACTIVITY.options(st.months), onChange: (v) => update({ activity: v }), style: full }), '1'),
+    cell('Time period', h(Select, { value: st.months, disabled: !periodEnabled, options: CUSTOMER_ACTIVITY.PERIODS, onChange: (v) => update({ months: v }), style: full }), '1'),
+    h('div', { key: 'filter-actions', style: { gridColumn: '1 / -1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+      h(Button, { type: 'link', onClick: clearAll, style: { paddingLeft: 0 } }, 'Clear filters'),
+      h(Button, { type: 'primary', disabled: !savedViewsAvailable, onClick: () => setViewModalOpen(true) }, 'Save as view')));
+  const selectRows = () => { const t = getTable(); return (t && t.resource && typeof t.resource.getSelectedRows === 'function' ? t.resource.getSelectedRows() : []) || []; };
+  const moreItems = [
+    ...(CAN_IMPORT ? [{ key: 'import', label: h(Upload, { accept: '.csv,text/csv', showUploadList: false, beforeUpload: importCSV }, h('span', { style: { display: 'block', width: '100%' } }, 'Import CSV')) }] : []),
+    { key: 'export', label: 'Export CSV' },
+    ...(String(activeView).match(/^\d+$/) ? [{ key: 'delete', label: 'Delete saved view', danger: true }] : []),
+  ];
+  const onMore = ({ key }) => {
+    if (key === 'export') exportCSV();
+    if (key === 'delete') deleteCurrentView();
+  };
+  const tabs = [...PRESET_VIEWS.map((v) => ({ key: v.key, label: v.name })), ...savedViews.map((v) => ({ key: String(v.id), label: v.name })), { key: '__new', label: savedViewsAvailable ? '+ New view' : '+ New view (setup required)', disabled: !savedViewsAvailable }];
+  const header = h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 10 } },
+    h('div', null, h('div', { style: { fontSize: 20, fontWeight: 650, color: '#111827' } }, 'Customers'), h('div', { style: { color: '#6b7280', marginTop: 2 } }, 'Manage customers and track engagement')),
+    h(Button, { type: 'primary', onClick: openNativeCreate }, '+ Add customer'));
+  const metricCard = (label, value, color) => h('div', { key: label, style: { minWidth: 0, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.03)' } },
+    h('div', { style: { color: '#6b7280', fontSize: 12, marginBottom: 2 } }, label),
+    h('div', { style: { color: color || '#111827', fontSize: 22, lineHeight: 1.25, fontWeight: 700 } }, value ?? '—'));
+  const metrics = h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, margin: '8px 0 12px' } },
+    metricCard('Total', counts.__total, '#111827'),
+    metricCard('Active', counts.Active, '#16a34a'),
+    metricCard('At Risk', counts['activity:atRisk'], '#dc2626'));
+  const controls = h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 } },
+    h(Input, { allowClear: true, placeholder: 'Search customers…', value: st.q, onChange: (e) => update({ q: e.target.value }, true), style: { flex: '1 1 360px', minWidth: 220 }, prefix: h('span', { style: { color: '#9ca3af' } }, '⌕'), 'aria-label': 'Search customers' }),
+    h(Popover, { trigger: 'click', placement: 'bottomRight', title: 'Filter customers', content: filterPanel }, h(Button, null, '☷ Filters' + (filterCount ? ' (' + filterCount + ')' : ''))),
+    h(Select, { value: st.sort, options: CUSTOMER_ACTIVITY.SORTS.map((s) => ({ value: s.value, label: s.label })), onChange: (v) => update({ sort: v }), style: { width: 190 }, 'aria-label': 'Sort customers' }),
+    h(Button, { type: 'primary', ghost: true, onClick: () => { setMsgSelected(selectRows()); setMsgOpen(true); } }, 'Send message'),
+    h(Button, { onClick: clearAll, disabled: !hasOtherFilters(st) && st.activity === 'all' }, 'Clear filters'),
+    h(Dropdown, { menu: { items: moreItems, onClick: onMore }, trigger: ['click'] }, h(Button, { 'aria-label': 'More customer actions' }, '•••')));
+  const summary = h('div', { role: 'status', 'aria-live': 'polite', style: { display: 'flex', justifyContent: 'space-between', gap: 12, color: loadError ? '#cf1322' : '#6b7280', fontSize: 13, marginTop: 14 } },
+    h('span', null, loadError || String(counts.__view ?? '—') + ' total customers'),
+    h('span', null, st.bday ? 'Upcoming birthday order' : (sortLabel || '')));
+  const saveModal = h(Modal, { open: viewModalOpen, title: 'Save customer view', okText: 'Save view', confirmLoading: savingView, onOk: saveCurrentView, onCancel: () => { setViewModalOpen(false); setViewName(''); } },
+    h('p', { style: { color: '#6b7280', marginTop: 0 } }, 'Save the current filters, birthday criteria, and sort order.'),
+    h(Input, { autoFocus: true, maxLength: 80, placeholder: 'View name', value: viewName, onChange: (e) => setViewName(e.target.value), onPressEnter: saveCurrentView }));
+  return h('div', { 'data-customer-toolbar': 'true', style: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '18px 20px' } },
+    header,
+    metrics,
+    h(Tabs, { activeKey: activeView, items: tabs, onChange: (key) => key === '__new' ? (savedViewsAvailable ? setViewModalOpen(true) : message.warning('Saved-view storage has not been created yet.')) : chooseView(key), size: 'small' }),
+    controls, summary,
+    !savedViewsAvailable && h(Alert, { type: 'warning', showIcon: true, style: { marginTop: 12 }, message: 'Saved views need the customerSavedViews collection. Built-in views still work.' }),
+    sendDialog, saveModal, h('a', { key: 'dl', ref: dlRef, style: { display: 'none' } }));
 }
 const CRM_MOBILE_CSS = "\n/* crm-mobile-css v1 — phones & tablets only; desktop (>1024px) untouched */\n@media (max-width: 1024px) {\n  .ant-drawer-left .ant-drawer-content-wrapper { width: min(300px, 85vw) !important; }\n  .ant-drawer-left .ant-layout-sider, .ant-drawer-left .ant-layout-sider-children { width: 100% !important; max-width: none !important; min-width: 0 !important; flex: 1 1 auto !important; }\n  .ant-drawer-left .ant-menu-title-content, .ant-drawer-left .ant-pro-base-menu-inline-item-title { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; line-height: 1.3; }\n  .ant-drawer-left .ant-menu-item { height: auto !important; min-height: 44px; padding-top: 8px !important; padding-bottom: 8px !important; }\n  .rbc-calendar { overflow-x: auto; -webkit-overflow-scrolling: touch; }\n  .rbc-time-view, .rbc-month-view, .rbc-agenda-view { min-width: 680px; }\n  .ant-table-content, .ant-table-body { -webkit-overflow-scrolling: touch; }\n  .ant-modal { max-width: calc(100vw - 16px) !important; }\n  .ant-modal-body { max-height: calc(100vh - 180px); overflow-y: auto; }\n  .ant-drawer-content-wrapper { max-width: 100vw !important; }\n  .ant-drawer-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }\n}\n@media (max-width: 767px) {\n  html, body, .nb-subpages-slot-without-header-and-side > div > div { overflow-x: hidden !important; }\n  .ant-table-thead > tr > th, .ant-table-tbody > tr > td { padding: 8px 8px !important; }\n  .ant-table-tbody > tr > td a, .ant-table-tbody > tr > td .ant-btn-link { display: inline-block; padding: 6px 2px; }\n  .ant-btn:not(.ant-btn-sm):not(.ant-btn-link):not(.ant-btn-text) { min-height: 40px; }\n  .ant-btn-icon-only:not(.ant-btn-sm) { min-width: 40px; }\n  .ant-input, .ant-input-affix-wrapper, .ant-picker:not(.ant-picker-range), .ant-input-number { min-height: 40px; }\n  .ant-select-single:not(.ant-select-sm) { height: auto !important; min-height: 40px; }\n  .ant-select-single:not(.ant-select-sm) .ant-select-selector { min-height: 40px !important; height: auto !important; align-items: center; }\n  .ant-input-affix-wrapper .ant-input, .ant-picker .ant-picker-input input { min-height: 0 !important; }\n  .ant-select-multiple .ant-select-selector { min-height: 40px; }\n  input, textarea, select, .ant-select-selection-search-input { font-size: 16px !important; }\n  .ant-picker-range { width: 100%; min-width: 0; min-height: 40px; }\n  .ant-picker-dropdown .ant-picker-panels { flex-direction: column !important; }\n  .ant-picker-dropdown { max-width: calc(100vw - 8px); }\n  .ant-picker-dropdown .ant-picker-panel-container { overflow: auto; max-height: 80vh; }\n  .ant-form-item-label > label { white-space: normal; height: auto; }\n  .ant-form-item-explain, .ant-form-item-extra { overflow-wrap: anywhere; }\n  .ant-form-item-control-input-content, .ant-descriptions-item-content { overflow-wrap: anywhere; word-break: break-word; min-width: 0; }\n  .ant-card-head-title { white-space: normal; }\n  .rbc-event-label, .rbc-event-content { font-size: 11px; }\n  .rbc-toolbar { flex-wrap: wrap; gap: 6px; }\n  .ant-tabs-nav { margin-bottom: 8px !important; }\n  .ant-space-horizontal.ant-space-align-center, .ant-pro-page-container-extra { flex-wrap: wrap; }\n  .ant-radio-group { display: flex; flex-wrap: wrap; }\n}\n";
 ctx.render(h(React.Fragment, null, h('style', { id: 'crm-mobile-css' }, CRM_MOBILE_CSS), h(Toolbar)));

@@ -106,7 +106,7 @@ export default function AvailabilityDashboard() {
         const response = await ctx.api.request({ url: 'appointmentAvailability:leaveConflicts', method: 'post', data: { staffId: payload.staffId, startTime: payload.startTime, endTime: payload.endTime } });
         const items = dataOf(response).appointments || [];
         if (items.length) {
-          setCover({ items, choices: Object.fromEntries(items.map((item: RecordItem) => [String(item.id), item.candidates?.[0]?.id])) });
+          setCover({ items, choices: Object.fromEntries(items.map((item: RecordItem) => [String(item.id), item.candidates?.[0]?.id || '__unassigned__'])) });
           pendingLeave.current = payload;
           setSaving(false);
           return;
@@ -132,7 +132,10 @@ export default function AvailabilityDashboard() {
     setSaving(true);
     try {
       // Move the appointments first: the leave is rejected while they are still booked on this staff member.
-      for (const item of cover.items) await ctx.api.request({ url: 'appointments:update', method: 'post', params: { filterByTk: item.id }, data: { staffId: cover.choices[String(item.id)] } });
+      for (const item of cover.items) {
+        const choice = cover.choices[String(item.id)];
+        await ctx.api.request({ url: 'appointments:update', method: 'post', params: { filterByTk: item.id }, data: { staffId: choice === '__unassigned__' ? null : choice } });
+      }
       await ctx.api.request({ url: 'staffAvailabilityLeaves:create', method: 'post', data: pendingLeave.current });
       ctx.message.success(t('Leave saved and appointments reassigned')); setCover(null); setEditor(null); pendingLeave.current = null; await load();
     } catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
@@ -187,9 +190,9 @@ export default function AvailabilityDashboard() {
       <List dataSource={cover?.items || []} renderItem={(item: RecordItem) => <List.Item>
         <Space direction="vertical" style={{ width: '100%' }} size={4}>
           <Typography.Text strong>{item.customerName} · {dayjs(item.startTime).format('MMM D, h:mm A')} – {dayjs(item.endTime).format('h:mm A')}</Typography.Text>
-          {item.candidates?.length
-            ? <Select style={{ width: '100%' }} value={cover?.choices[String(item.id)]} onChange={(value) => setCover((current) => current && ({ ...current, choices: { ...current.choices, [String(item.id)]: value } }))} options={item.candidates.map((candidate: RecordItem) => ({ value: candidate.id, label: candidate.name }))} />
-            : <Alert type="error" showIcon message={t('No other staff member is free at this time. Reschedule or cancel this appointment first.')} />}
+          <Select style={{ width: '100%' }} value={cover?.choices[String(item.id)]} onChange={(value) => setCover((current) => current && ({ ...current, choices: { ...current.choices, [String(item.id)]: value } }))}
+            options={[...(item.candidates || []).map((candidate: RecordItem) => ({ value: candidate.id, label: candidate.name })), { value: '__unassigned__', label: t('Leave unassigned — assign later') }]} />
+          {!item.candidates?.length && <Alert type="warning" showIcon message={t('No other staff member is free. This appointment will be left unassigned and can be assigned later.')} />}
         </Space>
       </List.Item>} />
     </Modal>
