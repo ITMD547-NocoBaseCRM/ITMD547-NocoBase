@@ -79,21 +79,33 @@ export class AvailabilityService {
     return { ...DEFAULT_SETTINGS, ...(plain(record) || {}) };
   }
 
-  async getWorkingPeriods(staffId: number | string, date: string): Promise<{ periods: Period[]; source: 'leave' | 'override' | 'schedule' | 'none'; settings: AvailabilitySettings }> {
+  async getWorkingPeriods(staffId: number | string, date: string): Promise<{ periods: Period[]; source: 'leave' | 'shift' | 'none'; settings: AvailabilitySettings }> {
     const settings = await this.settings();
-    const overrides = await this.db.getRepository('staffAvailabilityOverrides').find({ filter: { staffId, date }, sort: ['-updatedAt'], limit: 1 });
-    if (overrides.length) {
-      const override = plain(overrides[0]);
-      return { periods: override.isWorking ? asPeriods(override.periods) : [], source: 'override', settings };
-    }
-
-    const schedules = await this.db.getRepository('staffAvailabilitySchedules').find({
-      filter: { $and: [{ staffId }, { weekday: weekday(date, settings.timeZone) }, { effectiveFrom: { $lte: date } }, { $or: [{ effectiveTo: null }, { effectiveTo: { $gte: date } }] }] },
-      sort: ['-effectiveFrom', '-updatedAt'], limit: 1,
+    const dayStart = atBusinessTime(date, '00:00', settings.timeZone);
+    const dayEnd = atBusinessTime(addDays(date, 1), '00:00', settings.timeZone);
+    const hasLeave = await this.hasLeaveConflict(staffId, dayStart, dayEnd);
+    const shifts = await this.db.getRepository('employeeShifts').find({
+      filter: { $and: [
+        { staffId },
+        { status: { $notIn: ['cancelled', 'onLeave'] } },
+        { startTime: { $lt: dayEnd } },
+        { endTime: { $gt: dayStart } },
+      ] },
+      sort: ['startTime'],
     });
-    if (!schedules.length) return { periods: [], source: 'none', settings };
-    const schedule = plain(schedules[0]);
-    return { periods: schedule.isWorking ? asPeriods(schedule.periods) : [], source: 'schedule', settings };
+    if (!shifts.length) return { periods: [], source: hasLeave ? 'leave' : 'none', settings };
+    const clock = (value: Date | string) => {
+      const parts = dateParts(new Date(value), settings.timeZone);
+      return `${parts.hour}:${parts.minute}`;
+    };
+    return {
+      periods: shifts.map((record: any) => {
+        const shift = plain(record);
+        return { start: clock(shift.startTime), end: clock(shift.endTime) };
+      }),
+      source: 'shift',
+      settings,
+    };
   }
 
   async hasLeaveConflict(staffId: number | string, start: Date, end: Date) {
@@ -340,7 +352,7 @@ export class AvailabilityService {
     });
     const others = (await this.db.getRepository('staff').find({ fields: ['id', 'firstName', 'lastName', 'active'] }))
       .map((item: any) => plain(item))
-      .filter((item: any) => String(item.id) !== String(input.staffId) && item.active !== false);
+      .filter((item: any) => String(item.id) !== String(input.staffId) && item.active === 'active');
     const result = [];
     for (const record of appointments) {
       const appointment = plain(record);

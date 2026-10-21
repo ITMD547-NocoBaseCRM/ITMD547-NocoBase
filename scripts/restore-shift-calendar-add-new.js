@@ -117,15 +117,18 @@ async function main() {
 
   const meta = await client.request('flowSurfaces:getReactionMeta', { method: 'POST', body: { target: { uid: formUid } } });
   const linkage = ((meta.json?.data?.capabilities) || []).find((cap) => cap.kind === 'fieldLinkage');
-  if (linkage && !(linkage.normalizedRules || []).some((rule) => rule.key === SHIFT_DATE_RULE_KEY)) {
-    const rules = [...(linkage.normalizedRules || []), {
-      key: SHIFT_DATE_RULE_KEY, title: 'Shift date from start time',
-      when: { logic: '$and', items: [{ path: 'formValues.startTime', operator: '$notEmpty' }, { path: 'formValues.shiftDate', operator: '$empty' }] },
-      then: [{ type: 'assignField', items: [{ targetPath: 'shiftDate', value: { source: 'runjs', version: 'v2', code: SHIFT_DATE_CODE } }] }],
-    }];
+  if (linkage) {
+    const rules = [...(linkage.normalizedRules || [])];
+    if (!rules.some((rule) => rule.key === SHIFT_DATE_RULE_KEY)) rules.push({
+        key: SHIFT_DATE_RULE_KEY, title: 'Shift date from start time',
+        when: { logic: '$and', items: [{ path: 'formValues.startTime', operator: '$notEmpty' }, { path: 'formValues.shiftDate', operator: '$empty' }] },
+        then: [{ type: 'assignField', items: [{ targetPath: 'shiftDate', value: { source: 'runjs', version: 'v2', code: SHIFT_DATE_CODE } }] }],
+      });
+    if (rules.length !== (linkage.normalizedRules || []).length) {
     const set = await client.request('flowSurfaces:setFieldLinkageRules', { method: 'POST', body: { target: { uid: formUid }, expectedFingerprint: linkage.fingerprint, rules } });
     if (!set.ok) throw new Error(`setFieldLinkageRules failed (${set.status}): ${JSON.stringify(set.json).slice(0, 300)}`);
-    changes.push('added shift date linkage rule');
+      changes.push('added missing shift form linkage rules');
+    }
   }
 
   const tab = tree.find((m) => m.use === 'ChildPageTabModel');
