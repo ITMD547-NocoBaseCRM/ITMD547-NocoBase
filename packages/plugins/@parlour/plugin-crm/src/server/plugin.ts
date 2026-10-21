@@ -1,6 +1,13 @@
 import { Plugin } from '@nocobase/server';
 import sql from 'mssql';
 
+const appointmentCalendarColor = (status: string, staffId: unknown) => {
+  if (!staffId) return 'unassigned';
+  return ['scheduled', 'confirmed', 'inProgress', 'completed', 'cancelled', 'noShow'].includes(status)
+    ? status
+    : 'scheduled';
+};
+
 export class PluginCrmServer extends Plugin {
   async afterAdd() {}
 
@@ -25,6 +32,28 @@ export class PluginCrmServer extends Plugin {
       if (!service) return;
       if (missingPrice) model.set('priceAtBooking', service.get('price'));
       if (missingDuration) model.set('durationAtBooking', service.get('durationMinutes'));
+    });
+
+    // Build the calendar label before the appointment is persisted. A collection workflow also
+    // maintains this field, but that runs after the create response; the calendar would briefly
+    // render the new event as "N/A" until a manual refresh. Setting it here makes the first
+    // response complete while keeping the label correct for later staff/customer changes.
+    this.db.on('appointments.beforeSave', async (model: any, options: any) => {
+      const customerId = model.get('customerId');
+      const staffId = model.get('staffId');
+      const transaction = options?.transaction;
+      const [customer, staff] = await Promise.all([
+        customerId
+          ? this.db.getRepository('customers').findOne({ filterByTk: customerId, fields: ['firstName'], transaction })
+          : null,
+        staffId
+          ? this.db.getRepository('staff').findOne({ filterByTk: staffId, fields: ['firstName'], transaction })
+          : null,
+      ]);
+      const customerName = customer?.get('firstName')?.trim() || 'Customer';
+      const staffName = staff?.get('firstName')?.trim() || 'Unassigned';
+      model.set('calendarTitle', `${customerName} – ${staffName}`);
+      model.set('calendarColor', appointmentCalendarColor(model.get('status'), staffId));
     });
 
     // Visits = completed appointments. Recount after the appointment commits so

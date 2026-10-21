@@ -183,6 +183,10 @@ test('the toolbar script embeds the rules, has no placeholder left and parses as
   assert.ok(code.includes('const CUSTOMER_ACTIVITY = (function ()'));
   assert.ok(code.includes('ctx.render('));
   assert.ok(code.includes('"collection":"customers"'));
+  assert.ok(code.includes('"label":"Active"'), 'Active customer metric should be configured');
+  assert.ok(code.includes('"label":"At Risk"'), 'At Risk customer metric should be configured');
+  assert.ok(code.includes("metricCard('Total'"), 'Total customer metric should be rendered');
+  assert.ok(code.includes("' total customers'"), 'customer summary should use the requested title');
   assert.ok(!code.includes('"activity.'), 'the toolbar must not read through the relation');
   assert.ok(!/\bmodule\b/.test(code), 'RunJS rejects any reference to `module`');
   assert.ok(!/\brequire\(/.test(code), 'RunJS has no require()');
