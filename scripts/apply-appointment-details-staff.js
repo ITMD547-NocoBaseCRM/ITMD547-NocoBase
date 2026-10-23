@@ -25,6 +25,7 @@ const codeOf = (item) => {
   const field = Array.isArray(item?.subModels?.field) ? item.subModels.field[0] : item?.subModels?.field;
   return field?.stepParams?.jsSettings?.runJs?.code;
 };
+const fieldOf = (item) => Array.isArray(item?.subModels?.field) ? item.subModels.field[0] : item?.subModels?.field;
 function layoutFor(details) {
   const items = details?.subModels?.grid?.subModels?.items || [];
   const byPath = new Map(items.map((item) => [itemPath(item), item.uid]));
@@ -47,6 +48,22 @@ async function update(client, ref, check) {
   if (!details) throw new Error(`Appointment Details block ${ref.uid} not found`);
   const items = details.subModels?.grid?.subModels?.items || [];
   const matches = items.filter((item) => itemPath(item) === FIELD);
+  // Existing JS selectors only need a code update. Preserve their UIDs, field
+  // settings and the current Details layout rather than removing/re-adding them.
+  if (matches.length === 1 && fieldOf(matches[0])?.use === 'JSFieldModel') {
+    const field = fieldOf(matches[0]);
+    const changed = codeOf(matches[0]) !== CODE;
+    if (!check && changed) {
+      const result = await client.request('flowSurfaces:configure', {
+        method: 'POST', body: { target: { uid: field.uid }, changes: { version: 'v2', code: CODE } },
+      });
+      if (!result.ok) throw fail(`update Technician code on ${ref.uid}`, result);
+      const saved = await getSurface(client, { uid: ref.uid });
+      const savedField = findNode(saved, (node) => node.uid === field.uid);
+      if (savedField?.stepParams?.jsSettings?.runJs?.code !== CODE) throw new Error(`Technician code readback failed on ${ref.uid}`);
+    }
+    return { details: ref.uid, field: field.uid, changed, mode: 'in-place' };
+  }
   const keeper = matches.find((item) => codeOf(item) === CODE);
   const obsolete = keeper ? matches.filter((item) => item.uid !== keeper.uid) : matches;
   if (check) return { details: ref.uid, changed: !keeper || obsolete.length > 0 };

@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { createClient, formatErrors, getSurface } = require('./nocobase-api');
 const { FORM_LAYOUT_ROWS, REMOVED_FORM_FIELDS, formFields } = require('./appointments-page-blueprint');
-const { findForms, formGridLayout, formItemsByPath, missingFormFields } = require('./appointments-page-layout');
+const { findForms, formItemsByPath, missingFormFields } = require('./appointments-page-layout');
 
 const CODE = fs.readFileSync(path.join(__dirname, 'ui', 'appointment-available-staff.js'), 'utf8');
 const fail = (what, result) => new Error(`${what} failed (${result.status}):\n${formatErrors(result.json)}`);
@@ -25,6 +25,24 @@ function staffItem(form) {
   return (form?.subModels?.grid?.subModels?.items || []).find(
     (item) => item?.stepParams?.fieldSettings?.init?.fieldPath === 'staff',
   );
+}
+
+function completeFormLayout(form) {
+  const byPath = formItemsByPath(form);
+  const items = form?.subModels?.grid?.subModels?.items || [];
+  const rows = [];
+  for (const row of FORM_LAYOUT_ROWS) {
+    const present = row.filter(([fieldPath]) => byPath[fieldPath]);
+    if (present.length) rows.push(present.map(([fieldPath, span]) => [byPath[fieldPath], span]));
+  }
+  const included = new Set(rows.flat().map(([uid]) => uid));
+  for (const item of items) if (!included.has(item.uid)) rows.push([[item.uid, 24]]);
+  const keys = rows.map((_, index) => `row${index + 1}`);
+  return {
+    rows: Object.fromEntries(rows.map((row, index) => [keys[index], row.map(([uid]) => [uid])])),
+    sizes: Object.fromEntries(rows.map((row, index) => [keys[index], row.map(([, span]) => span)])),
+    rowOrder: keys,
+  };
 }
 
 async function updateForm(client, ref, check) {
@@ -90,7 +108,7 @@ async function updateForm(client, ref, check) {
   if (!fresh) throw new Error(`Updated appointment create form ${ref.uid} not found`);
   const layout = await client.request('flowSurfaces:setLayout', {
     method: 'POST',
-    body: { target: { uid: fresh.subModels.grid.uid }, ...formGridLayout(FORM_LAYOUT_ROWS, formItemsByPath(fresh)) },
+    body: { target: { uid: fresh.subModels.grid.uid }, ...completeFormLayout(fresh) },
   });
   if (!layout.ok) throw fail(`restore New appointment form layout on ${ref.uid}`, layout);
   return { form: ref.uid, changed: replaceStaff || missing.length > 0 || removed.length > 0, layoutAligned: true };

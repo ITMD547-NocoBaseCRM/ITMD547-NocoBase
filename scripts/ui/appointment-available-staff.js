@@ -11,15 +11,6 @@ const iso = (value) => {
   const date = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
-const listRecords = async (collection, filter, fields) => {
-  const resource = ctx.makeResource('MultiRecordResource');
-  resource.setResourceName(collection);
-  resource.setPageSize(500);
-  if (filter) resource.setFilter(filter);
-  if (fields && resource.setFields) resource.setFields(fields);
-  await resource.refresh();
-  return Array.isArray(resource.getData?.()) ? resource.getData() : [];
-};
 
 function AvailableStaffSelect() {
   const [options, setOptions] = useState([]);
@@ -34,6 +25,7 @@ function AvailableStaffSelect() {
   const endValue = ctx.formValues?.endTime;
 
   const load = async () => {
+    const requestId = ++requestRef.current;
     const start = iso(ctx.formValues?.startTime);
     if (!start) {
       setOptions([]); setLoading(false); setStatus('Choose an appointment start time.');
@@ -45,18 +37,14 @@ function AvailableStaffSelect() {
       setOptions([]); setLoading(false); setStatus('End time must be after start time.');
       return;
     }
-    const requestId = ++requestRef.current;
     setLoading(true); setStatus('Checking staff availability…');
     try {
-      const staffRows = await listRecords('staff', { active: { $eq: 'active' } }, ['id', 'firstName', 'lastName', 'active']);
+      const response = await ctx.api.request({
+        url: 'appointmentAvailability:availableStaff', method: 'post', data: { startTime: start, endTime: end },
+      });
       if (requestId !== requestRef.current) return;
-      const checked = await Promise.all(staffRows.map(async (item) => {
-        try {
-          await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', data: { staffId: item.id, startTime: start, endTime: end } });
-          return item;
-        } catch (error) { return null; }
-      }));
-      const available = checked.filter(Boolean)
+      const payload = response?.data?.data ?? response?.data ?? {};
+      const available = (payload.staff || [])
         .map((item) => ({ value: item.id, label: [item.firstName, item.lastName].filter(Boolean).join(' ') || 'Unnamed staff member' }));
       setOptions(available);
       setStatus(available.length ? available.length + ' staff available' : 'No staff available. You can continue and book this appointment without assigning staff.');
@@ -74,7 +62,9 @@ function AvailableStaffSelect() {
     const slot = String(startValue || '') + '|' + String(endValue || '');
     if (slot === slotRef.current) return;
     slotRef.current = slot;
+    requestRef.current += 1; // Invalidate the previous slot before the debounce expires.
     clearTimeout(timerRef.current);
+    setOptions([]);
     timerRef.current = setTimeout(load, 250);
     return () => clearTimeout(timerRef.current);
   }, [startValue, endValue]);
@@ -83,9 +73,10 @@ function AvailableStaffSelect() {
     const interval = setInterval(() => {
       const slot = String(ctx.formValues?.startTime || '') + '|' + String(ctx.formValues?.endTime || '');
       if (slot === slotRef.current) return;
-      slotRef.current = slot; load();
+      slotRef.current = slot;
+      clearTimeout(timerRef.current);
+      load();
     }, 600);
-    load();
     return () => { clearInterval(interval); clearTimeout(timerRef.current); requestRef.current += 1; };
   }, []);
 

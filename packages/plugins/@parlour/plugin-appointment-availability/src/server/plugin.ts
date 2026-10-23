@@ -9,18 +9,63 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
   }
 
   async beforeLoad() {
-    this.db.on('appointments.beforeCreate', async (model: any) => this.validateAppointment(model));
-    this.db.on('appointments.beforeUpdate', async (model: any) => this.validateAppointment(model));
-    this.db.on('staffAvailabilityLeaves.beforeCreate', async (model: any) => this.validateLeave(model));
-    this.db.on('staffAvailabilityLeaves.beforeUpdate', async (model: any) => this.validateLeave(model));
-    this.db.on('staffAvailabilityLeaves.afterCreate', async (model: any) => this.availability.applyLeaveToEmployeeShifts(model));
-    this.db.on('staffAvailabilityLeaves.afterUpdate', async (model: any) => {
-      await this.availability.clearLeaveProjection(model);
-      await this.availability.applyLeaveToEmployeeShifts(model);
+    this.db.on('appointments.beforeCreate', async (model: any, options: any) => this.validateAppointment(model, options));
+    this.db.on('appointments.beforeUpdate', async (model: any, options: any) => this.validateAppointment(model, options));
+    this.db.on('employeeShifts.beforeUpdate', async (model: any, options: any) => {
+      const values = model.get ? model.get() : model;
+      const changed = ['staffId', 'startTime', 'endTime', 'status'].some((field) => model.changed?.(field));
+      if (!changed) return;
+      const previous = { ...values };
+      for (const field of ['staffId', 'startTime', 'endTime', 'status']) if (model.changed?.(field)) previous[field] = model.previous(field);
+      const service = new AvailabilityService(this.db, options?.transaction);
+      await service.lockStaff([previous.staffId, values.staffId]);
+      await service.assertShiftChange(values, previous);
     });
-    this.db.on('staffAvailabilityLeaves.afterDestroy', async (model: any) => this.availability.clearLeaveProjection(model));
-    this.db.on('staffAvailabilityOverrides.beforeCreate', async (model: any) => this.validateOverride(model));
-    this.db.on('staffAvailabilityOverrides.beforeUpdate', async (model: any) => this.validateOverride(model));
+    this.db.on('employeeShifts.beforeDestroy', async (model: any, options: any) => {
+      const values = model.get ? model.get() : model;
+      const service = new AvailabilityService(this.db, options?.transaction);
+      await service.lockStaff([values.staffId]);
+      await service.assertShiftChange(null, values, true);
+    });
+    this.db.on('employeeShifts.beforeBulkDestroy', async (options: any) => {
+      const rows = await this.db.getModel('employeeShifts').findAll({ where: options.where, transaction: options.transaction });
+      const removedIds = rows.map((row: any) => row.get('id'));
+      const service = new AvailabilityService(this.db, options.transaction);
+      await service.lockStaff(rows.map((row: any) => row.get('staffId')));
+      for (const row of rows) await service.assertShiftChange(null, row.get({ plain: true }), true, removedIds);
+    });
+    this.db.on('staff.beforeUpdate', async (model: any, options: any) => {
+      if (model.changed?.('active')) {
+        const values = model.get ? model.get() : model;
+        const service = new AvailabilityService(this.db, options?.transaction);
+        await service.lockStaff([values.id]);
+        await service.assertStaffChange(values);
+      }
+    });
+    this.db.on('staffAvailabilityLeaves.beforeCreate', async (model: any, options: any) => this.validateLeave(model, options));
+    this.db.on('staffAvailabilityLeaves.beforeUpdate', async (model: any, options: any) => this.validateLeave(model, options));
+    this.db.on('staffAvailabilityLeaves.afterCreate', async (model: any, options: any) => new AvailabilityService(this.db, options?.transaction).applyLeaveToEmployeeShifts(model));
+    this.db.on('staffAvailabilityLeaves.afterUpdate', async (model: any, options: any) => {
+      const service = new AvailabilityService(this.db, options?.transaction);
+      await service.clearLeaveProjection(model);
+      await service.applyLeaveToEmployeeShifts(model);
+    });
+    this.db.on('staffAvailabilityLeaves.afterDestroy', async (model: any, options: any) => new AvailabilityService(this.db, options?.transaction).clearLeaveProjection(model));
+    this.db.on('staffAvailabilityOverrides.beforeCreate', async (model: any, options: any) => this.validateOverride(model, options));
+    this.db.on('staffAvailabilityOverrides.beforeUpdate', async (model: any, options: any) => this.validateOverride(model, options));
+    this.db.on('staffAvailabilityOverrides.beforeDestroy', async (model: any, options: any) => {
+      const values = model.get ? model.get() : model;
+      const service = new AvailabilityService(this.db, options?.transaction);
+      await service.lockStaff([values.staffId]);
+      await service.assertOverrideChange(null, values, true);
+    });
+    this.db.on('staffAvailabilityOverrides.beforeBulkDestroy', async (options: any) => {
+      const rows = await this.db.getModel('staffAvailabilityOverrides').findAll({ where: options.where, transaction: options.transaction });
+      const removedIds = rows.map((row: any) => row.get('id'));
+      const service = new AvailabilityService(this.db, options.transaction);
+      await service.lockStaff(rows.map((row: any) => row.get('staffId')));
+      for (const row of rows) await service.assertOverrideChange(null, row.get({ plain: true }), true, removedIds);
+    });
     this.db.on('staffAvailabilitySchedules.afterCreate', async (model: any, options: any) => {
       // Run after the insert commits: querying on a second pooled connection
       // while the create transaction still holds one exhausts the pool.
@@ -36,17 +81,42 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
       if (options?.transaction?.afterCommit) options.transaction.afterCommit(project);
       else await project();
     });
-    this.db.on('staffAvailabilitySchedules.afterUpdate', async (model: any) => {
-      await this.availability.clearScheduleProjection(model);
-      await this.availability.projectScheduleToEmployeeShifts(model);
+    this.db.on('staffAvailabilitySchedules.afterUpdate', async (model: any, options: any) => {
+      const service = new AvailabilityService(this.db, options?.transaction);
+      const values = model.get ? model.get() : model;
+      await service.lockStaff([values.staffId, model.previous?.('staffId')]);
+      await service.reconcileScheduleProjection(model);
     });
-    this.db.on('staffAvailabilitySchedules.afterDestroy', async (model: any) => this.availability.clearScheduleProjection(model));
+    this.db.on('staffAvailabilitySchedules.afterDestroy', async (model: any, options: any) => new AvailabilityService(this.db, options?.transaction).clearScheduleProjection(model));
   }
 
   async load() {
+    // Native request-interception workflows run after parseVariables. Check saved
+    // leave first, after ACL, so their generic "another shift" toast cannot mask it.
+    this.app.resourceManager.use(async (ctx: any, next: any) => {
+      const action = ctx.action;
+      if (action?.resourceName === 'employeeShifts'
+        && ['create', 'update'].includes(action.actionName)
+        && (!ctx.dataSource || ctx.dataSource.name === 'main')) {
+        try {
+          await this.validateShiftRequest(action);
+        } catch (error) {
+          this.respondAvailabilityError(ctx, error);
+        }
+      }
+      await next();
+    }, { tag: 'appointmentAvailabilityShiftLeave', after: 'acl', before: 'parseVariables' });
     this.app.resourceManager.define({
       name: 'appointmentAvailability',
       actions: {
+        availableStaff: async (ctx: any, next: any) => {
+          try {
+            ctx.body = await this.availability.availableStaff(ctx.action.params.values || ctx.action.params);
+          } catch (error) {
+            this.respondAvailabilityError(ctx, error);
+          }
+          await next();
+        },
         slots: async (ctx: any, next: any) => {
           try {
             const values = ctx.action.params.values || ctx.action.params;
@@ -78,7 +148,7 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         },
       },
     });
-    this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts'], 'loggedIn');
+    this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts', 'availableStaff'], 'loggedIn');
     for (const collection of ['staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves', 'appointmentAvailabilitySettings']) {
       this.app.acl.allow(collection, '*', 'loggedIn');
     }
@@ -94,14 +164,17 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     await this.availability.applyExistingLeaves();
   }
 
-  private async validateAppointment(model: any) {
+  private async validateAppointment(model: any, options?: any) {
     const values = model.get ? model.get() : model;
     const isExisting = values.id != null;
-    const schedulingChanged = !isExisting || ['staffId', 'startTime', 'endTime'].some((field) => model.changed?.(field));
+    const reactivated = model.changed?.('status') && ['cancelled', 'noShow'].includes(model.previous?.('status')) && !['cancelled', 'noShow'].includes(values.status);
+    const schedulingChanged = !isExisting || reactivated || ['staffId', 'startTime', 'endTime'].some((field) => model.changed?.(field));
     if (!schedulingChanged) return;
     if (!values.staffId || ['cancelled', 'noShow'].includes(values.status)) return;
     try {
-      await this.availability.assertAvailable({
+      const service = new AvailabilityService(this.db, options?.transaction);
+      await service.lockStaff([values.staffId, model.previous?.('staffId')]);
+      await service.assertAvailable({
         staffId: values.staffId,
         startTime: values.startTime,
         endTime: values.endTime,
@@ -114,20 +187,40 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     }
   }
 
-  private async validateLeave(model: any) {
+  private async validateShiftRequest(action: any) {
+    const { values = {}, filterByTk, filter } = action.params || {};
+    const fields = ['staffId', 'staff', 'startTime', 'endTime', 'status'];
+    if (action.actionName === 'update' && !fields.some((field) => Object.prototype.hasOwnProperty.call(values, field))) return;
+    const previous = action.actionName === 'create' ? [{}] : await this.db.getRepository('employeeShifts').find({
+      ...(filterByTk != null ? { filterByTk } : {}), ...(filter ? { filter } : {}),
+    });
+    for (const row of previous) {
+      const shift = { ...(row.get ? row.get({ plain: true }) : row), ...values };
+      if (Object.prototype.hasOwnProperty.call(values, 'staff')) {
+        shift.staffId = values.staff && typeof values.staff === 'object' ? values.staff.id : values.staff;
+      }
+      await this.availability.assertShiftOutsideLeave(shift);
+    }
+  }
+
+  private async validateLeave(model: any, options?: any) {
     const values = model.get ? model.get() : model;
     const start = new Date(values.startTime);
     const end = new Date(values.endTime);
     if (!values.staffId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) throw new AvailabilityError('Leave must have a valid start and end time.');
-    await this.availability.assertNoAppointmentsWouldBeInvalidated(values.staffId, start, end, values.id);
+    const service = new AvailabilityService(this.db, options?.transaction);
+    await service.lockStaff([values.staffId, model.previous?.('staffId')]);
+    await service.assertNoAppointmentsWouldBeInvalidated(values.staffId, start, end);
   }
 
-  private async validateOverride(model: any) {
+  private async validateOverride(model: any, options?: any) {
     const values = model.get ? model.get() : model;
-    if (!values.staffId || !values.date || values.isWorking) return;
-    const { start, end } = await this.availability.businessDayRange(values.date);
-    // A non-working override is an all-day leave. Reject it if it would strand an existing booking.
-    await this.availability.assertNoAppointmentsWouldBeInvalidated(values.staffId, start, end, values.id);
+    if (!values.staffId || !values.date) throw new AvailabilityError('Choose staff and a valid date for the override.');
+    const previous = { ...values };
+    for (const field of ['staffId', 'date', 'isWorking', 'periods']) if (model.changed?.(field)) previous[field] = model.previous(field);
+    const service = new AvailabilityService(this.db, options?.transaction);
+    await service.lockStaff([values.staffId, previous.staffId]);
+    await service.assertOverrideChange(values, previous);
   }
 
   private respondAvailabilityError(ctx: any, error: unknown) {

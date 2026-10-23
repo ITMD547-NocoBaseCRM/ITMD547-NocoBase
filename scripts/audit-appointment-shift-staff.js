@@ -40,14 +40,19 @@ async function main() {
     if (appointment.staffId) {
       const member = staffById.get(String(appointment.staffId));
       if (!member) issues.push({ severity: 'blocker', code: 'appointment_missing_staff', label, staffId: appointment.staffId });
-      else if (member.active === false) issues.push({ severity: 'warning', code: 'appointment_inactive_staff', label, staffId: appointment.staffId });
+      else if (!['active', true].includes(member.active)) issues.push({ severity: 'warning', code: 'appointment_inactive_staff', label, staffId: appointment.staffId });
       if (operationalAppointment(appointment)) {
         const leave = leaves.find((row) => String(row.staffId) === String(appointment.staffId)
           && overlaps(appointment.startTime, appointment.endTime, row.startTime, row.endTime));
         if (leave) issues.push({ severity: 'blocker', code: 'appointment_overlaps_leave', label, leaveId: leave.id });
-        const coveringShift = shifts.find((row) => String(row.staffId) === String(appointment.staffId)
-          && workingShift(row) && time(row.startTime) <= time(appointment.startTime) && time(row.endTime) >= time(appointment.endTime));
-        if (!coveringShift) issues.push({ severity: 'blocker', code: 'appointment_without_active_shift', label, staffId: appointment.staffId });
+        const availability = await client.request('appointmentAvailability:check', { method: 'POST', body: {
+          staffId: appointment.staffId, startTime: appointment.startTime, endTime: appointment.endTime, excludeAppointmentId: appointment.id,
+        } });
+        if (!availability.ok) {
+          if (availability.status !== 409) throw new Error(`Availability audit failed (${availability.status}): ${formatErrors(availability.json)}`);
+          const reason = formatErrors(availability.json);
+          if (!leave) issues.push({ severity: 'blocker', code: 'appointment_staff_unavailable', label, staffId: appointment.staffId, reason });
+        }
       }
     }
     const expectedColor = !appointment.staffId ? 'unassigned'
