@@ -2,11 +2,14 @@ import { Plugin } from '@nocobase/server';
 import sql from 'mssql';
 
 const appointmentCalendarColor = (status: string, staffId: unknown) => {
+  if (status === 'cancelled') return 'cancelled';
   if (!staffId) return 'unassigned';
   return ['scheduled', 'confirmed', 'inProgress', 'completed', 'cancelled', 'noShow'].includes(status)
     ? status
     : 'scheduled';
 };
+
+const strikeThrough = (value: string) => [...value].map((character) => character.trim() ? `${character}\u0336` : character).join('');
 
 export class PluginCrmServer extends Plugin {
   async afterAdd() {}
@@ -52,7 +55,8 @@ export class PluginCrmServer extends Plugin {
       ]);
       const customerName = customer?.get('firstName')?.trim() || 'Customer';
       const staffName = staff?.get('firstName')?.trim() || 'Unassigned';
-      model.set('calendarTitle', `${customerName} – ${staffName}`);
+      const title = `${customerName} – ${staffName}`;
+      model.set('calendarTitle', model.get('status') === 'cancelled' ? strikeThrough(title) : title);
       model.set('calendarColor', appointmentCalendarColor(model.get('status'), staffId));
     });
 

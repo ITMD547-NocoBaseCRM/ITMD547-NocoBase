@@ -11,6 +11,21 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
   async beforeLoad() {
     this.db.on('appointments.beforeCreate', async (model: any, options: any) => this.validateAppointment(model, options));
     this.db.on('appointments.beforeUpdate', async (model: any, options: any) => this.validateAppointment(model, options));
+    // The calendar paints a newly created/updated event from the mutation response before it
+    // performs another list request. Populate its title before persistence so that first paint
+    // contains the staff name instead of the calendar renderer's "N/A" fallback.
+    this.db.on('employeeShifts.beforeSave', async (model: any, options: any) => {
+      const staffId = model.get?.('staffId');
+      if (!staffId) return;
+      const staff = await this.db.getRepository('staff').findOne({
+        filterByTk: staffId,
+        fields: ['firstName', 'lastName'],
+        transaction: options?.transaction,
+      });
+      const staffName = [staff?.get('firstName'), staff?.get('lastName')].filter(Boolean).join(' ').trim();
+      if (!staffName) return;
+      model.set('calendarTitle', model.get?.('status') === 'onLeave' ? `On leave — ${staffName}` : staffName);
+    });
     this.db.on('employeeShifts.beforeUpdate', async (model: any, options: any) => {
       const values = model.get ? model.get() : model;
       const changed = ['staffId', 'startTime', 'endTime', 'status'].some((field) => model.changed?.(field));
@@ -99,7 +114,15 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         && ['create', 'update'].includes(action.actionName)
         && (!ctx.dataSource || ctx.dataSource.name === 'main')) {
         try {
-          await this.validateShiftRequest(action);
+          const conflicts = await this.validateShiftRequest(action, ctx.get?.('x-availability-leave-override') === 'true');
+          if (conflicts.length) {
+            const values = action.params.values || (action.params.values = {});
+            const notes = String(values.notes || '').trim();
+            const markers = [...new Set(conflicts.flatMap((conflict) => conflict.leaveIds))]
+              .map((id) => `[Leave override ${id}]`)
+              .filter((marker) => !notes.includes(marker));
+            if (markers.length) values.notes = [notes, ...markers].filter(Boolean).join(' ');
+          }
         } catch (error) {
           this.respondAvailabilityError(ctx, error);
         }
@@ -137,6 +160,16 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
           }
           await next();
         },
+        shiftLeaveConflict: async (ctx: any, next: any) => {
+          try {
+            const values = ctx.action.params.values || ctx.action.params;
+            const conflict = await this.availability.shiftLeaveConflict(this.normalizedShift(values));
+            ctx.body = { conflict };
+          } catch (error) {
+            this.respondAvailabilityError(ctx, error);
+          }
+          await next();
+        },
         check: async (ctx: any, next: any) => {
           try {
             await this.availability.assertAvailable(ctx.action.params.values || ctx.action.params);
@@ -148,7 +181,7 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         },
       },
     });
-    this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts', 'availableStaff'], 'loggedIn');
+    this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts', 'shiftLeaveConflict', 'availableStaff'], 'loggedIn');
     for (const collection of ['staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves', 'appointmentAvailabilitySettings']) {
       this.app.acl.allow(collection, '*', 'loggedIn');
     }
@@ -187,20 +220,31 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     }
   }
 
-  private async validateShiftRequest(action: any) {
+  private normalizedShift(values: any, previous: any = {}) {
+    const shift = { ...previous, ...values };
+    if (Object.prototype.hasOwnProperty.call(values, 'staff')) {
+      shift.staffId = values.staff && typeof values.staff === 'object' ? values.staff.id : values.staff;
+    }
+    return shift;
+  }
+
+  private async validateShiftRequest(action: any, allowLeaveOverride = false) {
     const { values = {}, filterByTk, filter } = action.params || {};
     const fields = ['staffId', 'staff', 'startTime', 'endTime', 'status'];
-    if (action.actionName === 'update' && !fields.some((field) => Object.prototype.hasOwnProperty.call(values, field))) return;
+    if (action.actionName === 'update' && !fields.some((field) => Object.prototype.hasOwnProperty.call(values, field))) return [];
     const previous = action.actionName === 'create' ? [{}] : await this.db.getRepository('employeeShifts').find({
       ...(filterByTk != null ? { filterByTk } : {}), ...(filter ? { filter } : {}),
     });
+    const conflicts = [];
     for (const row of previous) {
-      const shift = { ...(row.get ? row.get({ plain: true }) : row), ...values };
-      if (Object.prototype.hasOwnProperty.call(values, 'staff')) {
-        shift.staffId = values.staff && typeof values.staff === 'object' ? values.staff.id : values.staff;
+      const shift = this.normalizedShift(values, row.get ? row.get({ plain: true }) : row);
+      const conflict = await this.availability.shiftLeaveConflict(shift);
+      if (conflict) {
+        if (!allowLeaveOverride) throw new AvailabilityError(conflict.message);
+        conflicts.push(conflict);
       }
-      await this.availability.assertShiftOutsideLeave(shift);
     }
+    return conflicts;
   }
 
   private async validateLeave(model: any, options?: any) {
