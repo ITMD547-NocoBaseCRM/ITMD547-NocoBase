@@ -70,6 +70,47 @@ test('exact non-grid times are accepted by both available staff and booking vali
   await service.assertAvailable({ staffId: 1, startTime: start, endTime: end });
 });
 
+test('recurring availability projections use and backfill the staff name', async () => {
+  const projected = {
+    id: 31,
+    staffId: 1,
+    status: 'scheduled',
+    shiftType: 'availability',
+    calendarTitle: 'Available',
+    startTime: '2026-10-23T14:00:00Z',
+    endTime: '2026-10-23T22:00:00Z',
+    notes: '[Availability schedule 12]',
+  };
+  const { service, data } = fixture({ employeeShifts: [projected] });
+  await service.projectScheduleToEmployeeShifts({
+    id: 12,
+    staffId: 1,
+    effectiveFrom: '2000-01-01',
+    effectiveTo: '2099-12-31',
+    weekday: 0,
+    periods: [],
+    isWorking: true,
+  });
+  assert.equal(data.employeeShifts[0].calendarTitle, 'Test Staff');
+});
+
+test('ending projected leave restores the staff name instead of Available', async () => {
+  const projected = {
+    id: 32,
+    staffId: 1,
+    status: 'onLeave',
+    shiftType: 'availability',
+    calendarTitle: 'On leave — Test Staff',
+    startTime: '2026-10-23T14:00:00Z',
+    endTime: '2026-10-23T22:00:00Z',
+    notes: '[Availability schedule 12] [Availability leave 7]',
+  };
+  const { service, data } = fixture({ employeeShifts: [projected] });
+  await service.clearLeaveProjection({ id: 7 });
+  assert.equal(data.employeeShifts[0].status, 'scheduled');
+  assert.equal(data.employeeShifts[0].calendarTitle, 'Test Staff');
+});
+
 const hannahLeave = { id: 7, staffId: 1, startTime: '2026-10-23T05:00:00Z', endTime: '2026-10-24T05:00:00Z' };
 const hannahShift = { ...shift, startTime: '2026-10-23T19:00:00Z', endTime: '2026-10-24T00:00:00Z' };
 const hannahData = { staff: [{ id: 1, firstName: 'Hannah', lastName: 'Brooks', active: 'active' }], staffAvailabilityLeaves: [hannahLeave] };

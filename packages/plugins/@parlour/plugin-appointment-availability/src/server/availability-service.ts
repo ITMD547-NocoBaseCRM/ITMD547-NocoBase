@@ -334,7 +334,18 @@ export class AvailabilityService {
 
     const marker = `[Availability schedule ${schedule.id}]`;
     const shifts = this.repository('employeeShifts');
-    const existing = await shifts.find({ filter: { notes: { $includes: marker } }, fields: ['id', 'staffId', 'startTime', 'endTime'] });
+    const existing = await shifts.find({ filter: { notes: { $includes: marker } }, fields: ['id', 'staffId', 'startTime', 'endTime', 'status', 'calendarTitle'] });
+    const staffName = await this.staffDisplayName(schedule.staffId);
+
+    // Older projections used the generic title "Available". Keep existing
+    // calendar records readable after upgrades without recreating the shifts.
+    for (const record of existing) {
+      const shift = plain(record);
+      if (shift.status !== 'onLeave' && shift.calendarTitle !== staffName) {
+        await shifts.update({ filterByTk: shift.id, values: { calendarTitle: staffName } });
+        shift.calendarTitle = staffName;
+      }
+    }
 
     const settings = await this.settings();
     const today = localDate(new Date(), settings.timeZone);
@@ -357,7 +368,7 @@ export class AvailabilityService {
           endTime,
           shiftType: 'availability',
           status: 'scheduled',
-          calendarTitle: 'Available',
+          calendarTitle: staffName,
           notes: `${marker}${schedule.notes ? ` ${schedule.notes}` : ''}`,
         });
       }
@@ -472,11 +483,12 @@ export class AvailabilityService {
       const notes = typeof shift.notes === 'string' ? shift.notes : '';
       const remainingNotes = notes.replace(marker, '').replace(/\s{2,}/g, ' ').trim();
       const hasAnotherLeave = remainingNotes.includes('[Availability leave ');
+      const staffName = hasAnotherLeave ? null : await this.staffDisplayName(shift.staffId);
       await shifts.update({
         filterByTk: shift.id,
         values: {
           notes: remainingNotes,
-          ...(hasAnotherLeave ? {} : { status: 'scheduled', calendarTitle: 'Available' }),
+          ...(hasAnotherLeave ? {} : { status: 'scheduled', calendarTitle: staffName }),
         },
       });
       updated += 1;
