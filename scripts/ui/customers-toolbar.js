@@ -53,6 +53,7 @@ const BDAY_OPTS = [
   { value: 'today', label: 'Birthday today' },
   { value: '7', label: 'Birthdays in next 7 days' },
   { value: '30', label: 'Birthdays in next 30 days' },
+  { value: '2months', label: 'Birthdays in next 2 months' },
   { value: 'month', label: 'Birthdays this month' },
   { value: 'all', label: 'All, by upcoming birthday' },
 ];
@@ -69,13 +70,21 @@ const unpackState = (value) => {
   return { ...initialState(), ...raw, sel: { ...(raw.sel || {}) }, range: raw.range && raw.range.length === 2 ? [dayjs(raw.range[0]), dayjs(raw.range[1])] : null };
 };
 const mmdd = (d) => (d.getMonth() + 1) * 100 + d.getDate();
-function bdayFilter(v) {
+function bdayFilter(v, now = new Date()) {
   if (!v) return null;
-  const now = new Date(); const start = mmdd(now);
+  const start = mmdd(now);
   if (v === 'all') return {};
   if (v === 'today') return { birthMonthDay: { $eq: start } };
   if (v === 'month') { const m = (now.getMonth() + 1) * 100; return { $and: [{ birthMonthDay: { $gte: m + 1 } }, { birthMonthDay: { $lte: m + 31 } }] }; }
-  const end = mmdd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + Number(v)));
+  let endDate;
+  if (v === '2months') {
+    endDate = new Date(now.getFullYear(), now.getMonth() + 2, 1);
+    const lastDay = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate();
+    endDate.setDate(Math.min(now.getDate(), lastDay));
+  } else {
+    endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + Number(v));
+  }
+  const end = mmdd(endDate);
   return end >= start ? { $and: [{ birthMonthDay: { $gte: start } }, { birthMonthDay: { $lte: end } }] }
     : { $or: [{ birthMonthDay: { $gte: start } }, { birthMonthDay: { $lte: end } }] };
 }
@@ -355,6 +364,8 @@ function Toolbar() {
     const hideColumns = () => {
       for (const table of document.querySelectorAll('.ant-table table')) {
         const headers = [...table.querySelectorAll('thead th')];
+        const labels = headers.map((header) => (header.textContent || '').trim().toLowerCase());
+        if (!labels.includes('first name') || !labels.includes('appointments')) continue;
         const hiddenIndexes = new Set();
         headers.forEach((header, index) => {
           const label = (header.textContent || '').trim().toLowerCase();
@@ -369,22 +380,34 @@ function Toolbar() {
         const dataIndexes = headers.map((header, index) => ({ header, index, label: (header.textContent || '').trim() }))
           .filter(({ index, label }) => label && !hiddenIndexes.has(index));
         if (!dataIndexes.length) continue;
-        table.style.width = '100%';
         table.style.tableLayout = 'fixed';
-        const compactCount = headers.filter((header, index) => !hiddenIndexes.has(index) && !(header.textContent || '').trim()).length;
-        const equalWidth = 'calc((100% - ' + (compactCount * 48) + 'px) / ' + dataIndexes.length + ')';
+        const widths = { actions: 150, 'first name': 145, 'last name': 150, phone: 165, appointments: 360, 'last visit': 145 };
+        let tableWidth = 0;
         const cols = [...table.querySelectorAll('colgroup col')];
         headers.forEach((header, index) => {
           const hidden = hiddenIndexes.has(index);
-          const compact = !(header.textContent || '').trim();
-          const width = hidden ? '0px' : compact ? '48px' : equalWidth;
-          header.style.width = width; header.style.maxWidth = width;
-          if (cols[index]) { cols[index].style.width = width; if (hidden) cols[index].style.display = 'none'; }
+          const label = labels[index];
+          const width = hidden ? 0 : !label ? 48 : widths[label] || 150;
+          tableWidth += width;
+          const pixels = width + 'px';
+          header.style.width = pixels; header.style.minWidth = pixels; header.style.maxWidth = pixels;
+          if (cols[index]) { cols[index].style.width = pixels; if (hidden) cols[index].style.display = 'none'; }
           for (const row of table.querySelectorAll('tbody tr')) {
             const cell = row.children[index];
-            if (cell && !hidden) { cell.style.width = width; cell.style.maxWidth = width; }
+            if (cell && !hidden) {
+              cell.style.width = pixels; cell.style.minWidth = pixels; cell.style.maxWidth = pixels;
+              if (label === 'appointments') {
+                cell.style.whiteSpace = 'normal';
+                const appointmentList = cell.querySelector('div[style*="flex-wrap"]');
+                if (appointmentList) { appointmentList.style.flexWrap = 'wrap'; appointmentList.style.whiteSpace = 'normal'; }
+              }
+            }
           }
         });
+        table.style.width = tableWidth + 'px';
+        table.style.minWidth = tableWidth + 'px';
+        const scrollContainer = table.closest('.ant-table-content') || table.parentElement;
+        if (scrollContainer) scrollContainer.style.overflowX = 'auto';
       }
     };
     hideColumns();
@@ -503,15 +526,26 @@ function Toolbar() {
     } catch (e) { message.error('Could not save view: ' + errText(e)); }
     finally { setSavingView(false); }
   };
-  const deleteCurrentView = async () => {
-    const saved = savedViews.find((v) => String(v.id) === String(activeView));
+  const deleteSavedView = async (saved) => {
     if (!saved) return;
     try {
       await ctx.api.request({ url: SAVED_VIEW_COLLECTION + ':destroy', method: 'post', params: { filterByTk: saved.id } });
       setSavedViews((rows) => rows.filter((v) => v.id !== saved.id));
-      chooseView('all'); message.success('Deleted saved view');
+      if (String(activeView) === String(saved.id)) {
+        const next = initialState();
+        setActiveView('all'); setSt(next); stRef.current = next; apply(next);
+      }
+      message.success('Deleted saved view “' + saved.name + '”');
     } catch (e) { message.error('Could not delete view: ' + errText(e)); }
   };
+  const confirmDeleteView = (saved) => Modal.confirm({
+    title: 'Delete saved view?',
+    content: 'Delete “' + saved.name + '”? This will not delete any customers.',
+    okText: 'Delete view',
+    okButtonProps: { danger: true },
+    cancelText: 'Cancel',
+    onOk: () => deleteSavedView(saved),
+  });
   const openNativeCreate = () => {
     const root = document.body;
     const button = [...root.querySelectorAll('button')].find((el) => !el.closest('[data-customer-toolbar]') && /^(add new|add customer|create)$/i.test((el.textContent || '').trim()));
@@ -606,12 +640,24 @@ function Toolbar() {
   ];
   const onMore = ({ key }) => {
     if (key === 'export') exportCSV();
-    if (key === 'delete') deleteCurrentView();
+    if (key === 'delete') confirmDeleteView(savedViews.find((v) => String(v.id) === String(activeView)));
   };
-  const tabs = [...PRESET_VIEWS.map((v) => ({ key: v.key, label: v.name })), ...savedViews.map((v) => ({ key: String(v.id), label: v.name })), { key: '__new', label: savedViewsAvailable ? '+ New view' : '+ New view (setup required)', disabled: !savedViewsAvailable }];
-  const header = h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', marginBottom: 10 } },
-    h('div', null, h('div', { style: { fontSize: 20, fontWeight: 650, color: '#111827' } }, 'Customers'), h('div', { style: { color: '#6b7280', marginTop: 2 } }, 'Manage customers and track engagement')),
-    h(Button, { type: 'primary', onClick: openNativeCreate }, '+ Add customer'));
+  const tabs = [
+    ...PRESET_VIEWS.map((v) => ({ key: v.key, label: v.name })),
+    ...savedViews.map((v) => ({
+      key: String(v.id),
+      label: h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+        h('span', null, v.name),
+        h('button', {
+          type: 'button',
+          title: 'Delete ' + v.name,
+          'aria-label': 'Delete saved view ' + v.name,
+          onClick: (event) => { event.preventDefault(); event.stopPropagation(); confirmDeleteView(v); },
+          style: { border: 0, background: 'transparent', color: '#8c8c8c', cursor: 'pointer', padding: 0, width: 16, height: 16, lineHeight: '14px', borderRadius: 8, fontSize: 16 },
+        }, '×')),
+    })),
+    { key: '__new', label: savedViewsAvailable ? '+ New view' : '+ New view (setup required)', disabled: !savedViewsAvailable },
+  ];
   const metricCard = (label, value, color) => h('div', { key: label, style: { minWidth: 0, border: '1px solid #e5e7eb', borderRadius: 10, padding: '10px 14px', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.03)' } },
     h('div', { style: { color: '#6b7280', fontSize: 12, marginBottom: 2 } }, label),
     h('div', { style: { color: color || '#111827', fontSize: 22, lineHeight: 1.25, fontWeight: 700 } }, value ?? '—'));
@@ -633,7 +679,6 @@ function Toolbar() {
     h('p', { style: { color: '#6b7280', marginTop: 0 } }, 'Save the current filters, birthday criteria, and sort order.'),
     h(Input, { autoFocus: true, maxLength: 80, placeholder: 'View name', value: viewName, onChange: (e) => setViewName(e.target.value), onPressEnter: saveCurrentView }));
   return h('div', { 'data-customer-toolbar': 'true', style: { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '18px 20px' } },
-    header,
     metrics,
     h(Tabs, { activeKey: activeView, items: tabs, onChange: (key) => key === '__new' ? (savedViewsAvailable ? setViewModalOpen(true) : message.warning('Saved-view storage has not been created yet.')) : chooseView(key), size: 'small' }),
     controls, summary,

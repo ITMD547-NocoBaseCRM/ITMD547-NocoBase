@@ -140,7 +140,7 @@ export default function AvailabilityDashboard() {
       ctx.message.success(t('Leave saved and appointments reassigned')); setCover(null); setEditor(null); pendingLeave.current = null; await load();
     } catch (requestError) { ctx.message.error(errorMessage(requestError)); } finally { setSaving(false); }
   };
-  const remove = async (resource: string, id: any) => { try { await ctx.api.request({ url: `${resource}:destroy`, method: 'post', data: { filterByTk: id } }); await load(); } catch (requestError) { ctx.message.error(errorMessage(requestError)); } };
+  const remove = async (resource: string, id: any) => { try { await ctx.api.request({ url: `${resource}:destroy`, method: 'post', params: { filterByTk: id } }); await load(); } catch (requestError) { ctx.message.error(errorMessage(requestError)); } };
 
   const shiftColumns = [
     { title: t('Staff'), render: (item: RecordItem) => staffLabel(item.staffId) },

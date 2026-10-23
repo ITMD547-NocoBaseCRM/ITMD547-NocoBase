@@ -7,8 +7,8 @@ const h = React.createElement;
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const clock = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-const activeStatuses = new Set(['scheduled', 'confirmed', 'completed']);
-const statusColor = { scheduled: 'blue', confirmed: 'cyan', completed: 'green', cancelled: 'default', noShow: 'orange' };
+const activeStatuses = new Set(['scheduled', 'confirmed', 'inProgress', 'completed']);
+const statusColor = { scheduled: 'blue', confirmed: 'cyan', inProgress: 'purple', completed: 'green', cancelled: 'default', noShow: 'orange' };
 
 const recordsOf = (response) => {
   const value = response?.data?.data ?? response?.data ?? [];
@@ -41,29 +41,13 @@ const loadAppointments = async (filter) => {
   await resource.refresh();
   return Array.isArray(resource.getData?.()) ? resource.getData() : [];
 };
-const listRecords = async (collection, filter, fields) => {
-  const resource = ctx.makeResource('MultiRecordResource');
-  resource.setResourceName(collection);
-  resource.setPageSize(500);
-  if (filter) resource.setFilter(filter);
-  if (fields && resource.setFields) resource.setFields(fields);
-  await resource.refresh();
-  return Array.isArray(resource.getData?.()) ? resource.getData() : [];
-};
 const availableStaffFor = async (appointment) => {
   const start = new Date(appointment.startTime).toISOString();
   const endValue = appointment.endTime || new Date(new Date(start).getTime() + 60 * 60000);
   const end = new Date(endValue).toISOString();
-  const [staffRows, shiftRows, conflictRows] = await Promise.all([
-    listRecords('staff', null, ['id', 'firstName', 'lastName', 'active']),
-    listRecords('employeeShifts', { $and: [{ startTime: { $lte: start } }, { endTime: { $gte: end } }, { status: { $notIn: ['onLeave', 'cancelled'] } }] }, ['id', 'staffId']),
-    listRecords('appointments', { $and: [{ id: { $ne: appointment.id } }, { status: { $notIn: ['cancelled', 'noShow'] } }, { startTime: { $lt: end } }, { endTime: { $gt: start } }, { staffId: { $notEmpty: true } }] }, ['id', 'staffId']),
-  ]);
-  const shifted = new Set(shiftRows.map((item) => String(item.staffId)).filter(Boolean));
-  const booked = new Set(conflictRows.map((item) => String(item.staffId)).filter(Boolean));
-  return staffRows
-    .filter((item) => item.active !== false && item.active !== 'inactive' && shifted.has(String(item.id)) && !booked.has(String(item.id)))
-    .map((item) => ({ value: item.id, label: personName(item, 'Unnamed staff member') }));
+  const response = await ctx.api.request({ url: 'appointmentAvailability:availableStaff', method: 'post', data: { startTime: start, endTime: end, excludeAppointmentId: appointment.id } });
+  const payload = response?.data?.data ?? response?.data ?? {};
+  return (payload.staff || []).map((item) => ({ value: item.id, label: personName(item, 'Unnamed staff member') }));
 };
 const assignAppointment = async (appointmentId, staffId) => {
   const resource = ctx.makeResource('SingleRecordResource');
@@ -149,6 +133,7 @@ function Dashboard() {
 
   const operational = state.rows.filter((item) => activeStatuses.has(item.status));
   const revenue = operational.reduce((sum, item) => sum + earning(item), 0);
+  const currentRevenue = state.rows.filter((item) => item.status === 'completed').reduce((sum, item) => sum + earning(item), 0);
   const flagged = operational.filter((item) => sensitivityLabels(item.customer).length > 0);
   const unassigned = operational.filter((item) => !item.staffId && !item.staff).length;
 
@@ -159,11 +144,12 @@ function Dashboard() {
         h(Typography.Text, { type: 'secondary' }, dayLabel.format(new Date()))),
       h(Button, { onClick: load, loading: state.loading }, 'Refresh')),
     state.error ? h(Alert, { type: 'error', showIcon: true, message: state.error, style: { marginBottom: 16 } }) : null,
-    h(Row, { gutter: [12, 12], style: { marginBottom: 16 } },
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Appointments', value: operational.length, hint: state.rows.length === operational.length ? 'scheduled today' : `${state.rows.length - operational.length} cancelled / no-show` })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Expected earnings', value: money.format(revenue), hint: 'from active bookings', tone: '#cde9d5' })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Safety flags', value: flagged.length, hint: flagged.length ? 'review before service' : 'no sensitivities flagged', tone: flagged.length ? '#ffc9bb' : '#cde9d5' })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Unassigned', value: unassigned, hint: unassigned ? 'needs staff attention' : 'all appointments covered', tone: unassigned ? '#ffe0a3' : '#cde9d5' }))),
+    h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: 12, marginBottom: 16 } },
+      h(Metric, { label: 'Appointments', value: operational.length, hint: state.rows.length === operational.length ? 'scheduled today' : `${state.rows.length - operational.length} cancelled / no-show` }),
+      h(Metric, { label: 'Expected earnings', value: money.format(revenue), hint: 'from active bookings', tone: '#cde9d5' }),
+      h(Metric, { label: 'Current earnings', value: money.format(currentRevenue), hint: 'from appointments completed today', tone: '#b8ddf5' }),
+      h(Metric, { label: 'Safety flags', value: flagged.length, hint: flagged.length ? 'review before service' : 'no sensitivities flagged', tone: flagged.length ? '#ffc9bb' : '#cde9d5' }),
+      h(Metric, { label: 'Unassigned', value: unassigned, hint: unassigned ? 'needs staff attention' : 'all appointments covered', tone: unassigned ? '#ffe0a3' : '#cde9d5' })),
     state.loading ? h(Card, { style: { borderRadius: 14 } }, h(Skeleton, { active: true, paragraph: { rows: 8 } })) :
       h(Row, { gutter: [16, 16] },
         h(Col, { xs: 24, lg: 16 }, h(Card, { title: `Today’s schedule (${operational.length})`, style: { borderRadius: 14 } },
