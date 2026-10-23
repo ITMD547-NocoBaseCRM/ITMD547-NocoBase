@@ -111,6 +111,18 @@ test('ending projected leave restores the staff name instead of Available', asyn
   assert.equal(data.employeeShifts[0].calendarTitle, 'Test Staff');
 });
 
+test('saved leave synchronizes manual shifts but preserves explicit leave overrides', async () => {
+  const leave = { id: 7, staffId: 1, startTime: '2026-10-23T05:00:00Z', endTime: '2026-10-24T05:00:00Z' };
+  const manual = { ...shift, id: 33, startTime: '2026-10-23T13:00:00Z', endTime: '2026-10-23T22:00:00Z', notes: null };
+  const override = { ...manual, id: 34, notes: '[Leave override 7]' };
+  const { service, data } = fixture({ employeeShifts: [manual, override] });
+  await service.applyLeaveToEmployeeShifts(leave);
+  assert.equal(data.employeeShifts[0].status, 'onLeave');
+  assert.match(data.employeeShifts[0].notes, /\[Availability leave 7\]/);
+  assert.equal(data.employeeShifts[1].status, 'scheduled');
+  assert.equal(data.employeeShifts[1].notes, '[Leave override 7]');
+});
+
 const hannahLeave = { id: 7, staffId: 1, startTime: '2026-10-23T05:00:00Z', endTime: '2026-10-24T05:00:00Z' };
 const hannahShift = { ...shift, startTime: '2026-10-23T19:00:00Z', endTime: '2026-10-24T00:00:00Z' };
 const hannahData = { staff: [{ id: 1, firstName: 'Hannah', lastName: 'Brooks', active: 'active' }], staffAvailabilityLeaves: [hannahLeave] };
@@ -118,7 +130,7 @@ const hannahData = { staff: [{ id: 1, firstName: 'Hannah', lastName: 'Brooks', a
 test('a shift during saved leave explains who is away, when and how to resolve it', async () => {
   const { service } = fixture(hannahData);
   await assert.rejects(service.assertShiftOutsideLeave(hannahShift), {
-    message: 'Hannah Brooks is on leave on Oct 23, 2026. Choose another staff member or date, or update the saved leave before scheduling this shift.',
+    message: 'Hannah Brooks is recorded as on leave on Oct 23, 2026. Create this shift anyway to override the leave only for these hours.',
   });
 });
 
@@ -148,20 +160,20 @@ async function shiftMiddleware(extra = {}) {
   await plugin.load();
   return { ...f, ...registrations[0] };
 }
-function shiftContext(values, actionName = 'create', params = {}) {
-  return { action: { resourceName: 'employeeShifts', actionName, params: { values, ...params } }, dataSource: { name: 'main' }, throw(status, message) { throw Object.assign(new Error(message), { status }); } };
+function shiftContext(values, actionName = 'create', params = {}, headers = {}) {
+  return { action: { resourceName: 'employeeShifts', actionName, params: { values, ...params } }, dataSource: { name: 'main' }, get(name) { return headers[name.toLowerCase()]; }, throw(status, message) { throw Object.assign(new Error(message), { status }); } };
 }
 test('native shift request reports leave before generic overlap workflow runs, after ACL', async () => {
   const { handler, options } = await shiftMiddleware();
   assert.equal(options.after, 'acl');
   assert.equal(options.before, 'parseVariables');
   let workflowCalled = false;
-  await assert.rejects(handler(shiftContext({ ...hannahShift, staffId: undefined, staff: { id: 1 } }), async () => { workflowCalled = true; }), (error) => error.status === 409 && /Hannah Brooks is on leave on Oct 23/.test(error.message));
+  await assert.rejects(handler(shiftContext({ ...hannahShift, staffId: undefined, staff: { id: 1 } }), async () => { workflowCalled = true; }), (error) => error.status === 409 && /Hannah Brooks is recorded as on leave on Oct 23/.test(error.message));
   assert.equal(workflowCalled, false);
 });
 test('native shift updates combine saved fields with changes and resolve the newly selected staff', async () => {
   const { handler } = await shiftMiddleware({ employeeShifts: [hannahShift] });
-  await assert.rejects(handler(shiftContext({ status: 'scheduled' }, 'update', { filterByTk: 10 }), async () => {}), /Hannah Brooks is on leave/);
+  await assert.rejects(handler(shiftContext({ status: 'scheduled' }, 'update', { filterByTk: 10 }), async () => {}), /Hannah Brooks is recorded as on leave/);
   let nextCalled = 0;
   await handler(shiftContext({ staff: { id: 2 } }, 'update', { filterByTk: 10 }), async () => { nextCalled++; });
   await handler(shiftContext({ notes: 'Notes only' }, 'update', { filterByTk: 10 }), async () => { nextCalled++; });
@@ -177,6 +189,14 @@ test('normal shift overlaps still reach existing validation, and other resources
   await handler(ctx, async () => { nextCalled++; });
   assert.equal(nextCalled, 2);
 });
+test('confirmed leave override reaches normal validation and records an auditable marker', async () => {
+  const { handler } = await shiftMiddleware();
+  const ctx = shiftContext({ ...hannahShift, staffId: undefined, staff: { id: 1 }, notes: 'Manager approved' }, 'create', {}, { 'x-availability-leave-override': 'true' });
+  let nextCalled = 0;
+  await handler(ctx, async () => { nextCalled++; });
+  assert.equal(nextCalled, 1);
+  assert.match(ctx.action.params.values.notes, /Manager approved \[Leave override 7\]/);
+});
 test('leave, overlapping bookings and inactive staff are silently excluded', async () => {
   for (const extra of [
     { staffAvailabilityLeaves: [{ staffId: 1, startTime: start, endTime: end }] },
@@ -187,6 +207,13 @@ test('leave, overlapping bookings and inactive staff are silently excluded', asy
     assert.deepEqual((await service.availableStaff({ startTime: start, endTime: end })).staff, []);
     await assert.rejects(service.assertAvailable({ staffId: 1, startTime: start, endTime: end }));
   }
+});
+test('a confirmed shift overrides only its matching leave and exact working hours', async () => {
+  const overridingShift = { ...shift, notes: '[Leave override 7]' };
+  const leave = { id: 7, staffId: 1, startTime: '2026-10-22T05:00:00Z', endTime: '2026-10-23T05:00:00Z' };
+  const { service } = fixture({ employeeShifts: [overridingShift], staffAvailabilityLeaves: [leave] });
+  assert.equal((await service.availableStaff({ startTime: start, endTime: end })).staff.length, 1);
+  assert.equal((await service.availableStaff({ startTime: '2026-10-22T13:00:00Z', endTime: '2026-10-22T14:00:00Z' })).staff.length, 0);
 });
 test('editing a booking excludes its own ID; cancelled/no-show bookings do not occupy the slot', async () => {
   const { service } = fixture({ appointments: [appointment] });

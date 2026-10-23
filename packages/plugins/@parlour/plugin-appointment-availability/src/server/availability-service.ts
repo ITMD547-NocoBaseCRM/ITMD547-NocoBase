@@ -2,6 +2,7 @@ type Period = { start: string; end: string };
 type AvailabilitySettings = { timeZone: string; slotIntervalMinutes: number; defaultDurationMinutes: number };
 type Range = { start: Date; end: Date };
 type Snapshot = { settings: AvailabilitySettings; staff: any[]; shifts: any[]; overrides: any[]; leaves: any[]; appointments: any[] };
+export type ShiftLeaveConflict = { leaveIds: Array<number | string>; staffName: string; period: string; message: string };
 
 const DEFAULT_SETTINGS: AvailabilitySettings = {
   timeZone: 'America/Chicago',
@@ -104,18 +105,18 @@ export class AvailabilityService {
     return { ...DEFAULT_SETTINGS, ...(plain(record) || {}) };
   }
 
-  async assertShiftOutsideLeave(shift: any) {
-    if (!shift.staffId || ['cancelled', 'onLeave'].includes(shift.status)) return;
+  async shiftLeaveConflict(shift: any): Promise<ShiftLeaveConflict | null> {
+    if (!shift.staffId || ['cancelled', 'onLeave'].includes(shift.status)) return null;
     const start = new Date(shift.startTime);
     const end = new Date(shift.endTime);
     // Leave ordinary form validation to the existing shift workflow.
-    if (!Number.isFinite(+start) || !Number.isFinite(+end) || end <= start) return;
-    const record = await this.repository('staffAvailabilityLeaves').findOne({
+    if (!Number.isFinite(+start) || !Number.isFinite(+end) || end <= start) return null;
+    const records = await this.repository('staffAvailabilityLeaves').find({
       filter: { staffId: shift.staffId, startTime: { $lt: end }, endTime: { $gt: start } },
       sort: ['startTime', 'id'],
     });
-    if (!record) return;
-    const leave = plain(record);
+    if (!records.length) return null;
+    const leave = plain(records[0]);
     const [settings, member] = await Promise.all([
       this.settings(),
       this.repository('staff').findOne({ filter: { id: shift.staffId }, fields: ['firstName', 'lastName'] }),
@@ -136,7 +137,17 @@ export class AvailabilityService {
     const period = allDay && localDate(from, settings.timeZone) === localDate(last, settings.timeZone)
       ? `on ${format.format(from)}`
       : `from ${format.format(from)} to ${format.format(last)}`;
-    throw new AvailabilityError(`${name} is on leave ${period}. Choose another staff member or date, or update the saved leave before scheduling this shift.`);
+    return {
+      leaveIds: records.map((row: any) => plain(row).id),
+      staffName: name,
+      period,
+      message: `${name} is recorded as on leave ${period}. Create this shift anyway to override the leave only for these hours.`,
+    };
+  }
+
+  async assertShiftOutsideLeave(shift: any) {
+    const conflict = await this.shiftLeaveConflict(shift);
+    if (conflict) throw new AvailabilityError(conflict.message);
   }
 
   private async snapshot(start: Date, end: Date, staffId?: number | string, configuration?: AvailabilitySettings): Promise<Snapshot> {
@@ -195,7 +206,17 @@ export class AvailabilityService {
     const sameStaff = (row: any) => String(row.staffId) === String(staffId);
     const staff = snapshot.staff.find((row) => String(row.id) === String(staffId));
     if (!staff || !['active', true].includes(staff.active)) return 'This staff member is inactive or no longer exists.';
-    if (snapshot.leaves.some((row) => sameStaff(row) && new Date(row.startTime) < end && new Date(row.endTime) > start)) return 'This time overlaps staff leave.';
+    const activeLeave = snapshot.leaves.find((row) => {
+      if (!sameStaff(row) || new Date(row.startTime) >= end || new Date(row.endTime) <= start) return false;
+      const marker = `[Leave override ${row.id}]`;
+      const explicitlyCovered = snapshot.shifts.some((shift) => sameStaff(shift)
+        && !['cancelled', 'onLeave'].includes(shift.status)
+        && new Date(shift.startTime) <= start
+        && new Date(shift.endTime) >= end
+        && String(shift.notes || '').includes(marker));
+      return !explicitlyCovered;
+    });
+    if (activeLeave) return 'This time overlaps staff leave.';
     if (!this.ranges(snapshot, staffId, start, end).some((range) => start >= range.start && end <= range.end)) return 'This time is outside the staff member’s available schedule.';
     if (snapshot.appointments.some((row) => sameStaff(row) && String(row.id) !== String(excludeAppointmentId || '') && new Date(row.startTime) < end && new Date(row.endTime || new Date(+new Date(row.startTime) + snapshot.settings.defaultDurationMinutes * 60000)) > start)) return 'This staff member already has an appointment at that time.';
     return '';
@@ -380,7 +401,23 @@ export class AvailabilityService {
       fields: ['startTime', 'endTime'],
     })).map((item: any) => plain(item));
     const covered = (record: Record<string, any>) => manual.some((item: any) => new Date(item.startTime) <= new Date(record.startTime as any) && new Date(item.endTime) >= new Date(record.endTime as any));
-    const fresh = records.filter((record) => !covered(record) && !existing.some((item: any) => String(plain(item).staffId) === String(record.staffId) && +new Date(plain(item).startTime) === +new Date(record.startTime as any) && +new Date(plain(item).endTime) === +new Date(record.endTime as any)));
+    // A projection may already exist when a covering manual shift is added later.
+    // Cancel that generated row so the staff member appears only once. Cancelled
+    // projections remain as history and are ignored if the schedule is projected again.
+    for (const item of existing) {
+      const projected = plain(item);
+      if (projected.status !== 'cancelled' && covered(projected)) {
+        await shifts.update({ filterByTk: projected.id, values: { status: 'cancelled' }, hooks: false });
+        projected.status = 'cancelled';
+      }
+    }
+    const fresh = records.filter((record) => !covered(record) && !existing.some((item: any) => {
+      const current = plain(item);
+      return current.status !== 'cancelled'
+        && String(current.staffId) === String(record.staffId)
+        && +new Date(current.startTime) === +new Date(record.startTime as any)
+        && +new Date(current.endTime) === +new Date(record.endTime as any);
+    }));
     if (!fresh.length) return 0;
     await shifts.createMany({ records: fresh });
     return fresh.length;
@@ -422,9 +459,10 @@ export class AvailabilityService {
   }
 
   /**
-   * Keep an availability shift on the calendar while a staff member is away.
-   * Only shifts generated by this plugin are changed; manually maintained
-   * employee shifts keep their own status and are never overwritten.
+   * Synchronize saved leave into every overlapping shift. Generated and manual
+   * shifts both represent working availability, so leaving manual rows scheduled
+   * would incorrectly show an absent staff member on the calendar. A shift that
+   * was explicitly confirmed with a matching leave-override marker is preserved.
    */
   async applyLeaveToEmployeeShifts(input: unknown) {
     const leave = plain(input);
@@ -436,11 +474,10 @@ export class AvailabilityService {
     const staffName = await this.staffDisplayName(leave.staffId);
     const calendarTitle = `On leave — ${staffName}`;
     const shifts = this.repository('employeeShifts');
-    const generatedShifts = await shifts.find({
+    const overlappingShifts = await shifts.find({
       filter: {
         $and: [
           { staffId: leave.staffId },
-          { notes: { $includes: '[Availability schedule ' } },
           { startTime: { $lt: end } },
           { endTime: { $gt: start } },
         ],
@@ -448,17 +485,21 @@ export class AvailabilityService {
     });
 
     let updated = 0;
-    for (const record of generatedShifts) {
+    for (const record of overlappingShifts) {
       const shift = plain(record);
       const notes = typeof shift.notes === 'string' ? shift.notes : '';
+      // A manager explicitly scheduled this staff member during this leave.
+      // Preserve that exact working window while retaining the leave record.
+      if (notes.includes(`[Leave override ${leave.id}]`)) continue;
       if (notes.includes(marker)) {
         if (shift.status === 'onLeave' && shift.calendarTitle === calendarTitle) continue;
-        await shifts.update({ filterByTk: shift.id, values: { status: 'onLeave', calendarTitle } });
+        await shifts.update({ filterByTk: shift.id, values: { status: 'onLeave', calendarTitle }, hooks: false });
         updated += 1;
         continue;
       }
       await shifts.update({
         filterByTk: shift.id,
+        hooks: false,
         values: {
           status: 'onLeave',
           calendarTitle,
@@ -486,6 +527,7 @@ export class AvailabilityService {
       const staffName = hasAnotherLeave ? null : await this.staffDisplayName(shift.staffId);
       await shifts.update({
         filterByTk: shift.id,
+        hooks: false,
         values: {
           notes: remainingNotes,
           ...(hasAnotherLeave ? {} : { status: 'scheduled', calendarTitle: staffName }),

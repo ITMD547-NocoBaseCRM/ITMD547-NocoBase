@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#252525;background:#faf7f4}
+    *{box-sizing:border-box}body{margin:0;padding:12px 12px 82px;background:#faf7f4}.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+    h1{font-size:22px;line-height:1.15;margin:0}.date{font-size:12px;color:#777;margin-top:3px}.refresh{border:1px solid #d8cec8;background:#fff;border-radius:9px;padding:7px 10px;color:#704431;font-weight:600}
+    .metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{background:#fff;border:1px solid #eadfd8;border-radius:11px;padding:11px;min-width:0}.metric.wide{grid-column:1/-1}.metric.good{border-color:#cde9d5}.metric.info{border-color:#b8ddf5}.metric.warn{border-color:#ffe0a3}.metric.danger{border-color:#ffc9bb}
+    .label{color:#777;font-size:11px}.value{font-size:22px;line-height:1.2;font-weight:750;margin-top:3px}.hint{color:#777;font-size:10px;line-height:1.25;margin-top:3px}
+    .panel{background:#fff;border:1px solid #eadfd8;border-radius:11px;margin-top:12px;overflow:hidden}.panel-title{font-size:14px;font-weight:700;padding:12px;border-bottom:1px solid #eee5df}.empty,.error{padding:26px 14px;text-align:center;color:#777;font-size:13px}.error{color:#b42318}
+    .appt{display:grid;grid-template-columns:58px minmax(0,1fr);gap:9px;padding:12px;border-bottom:1px solid #f0e8e3}.appt:last-child{border-bottom:0}.time{font-size:12px;font-weight:700;color:#6f3f2e}.line{display:flex;justify-content:space-between;gap:8px}.customer{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.price{font-size:12px;font-weight:650;white-space:nowrap}.sub{font-size:12px;color:#6b7280;margin-top:3px}.status{display:inline-block;margin-top:7px;padding:2px 7px;border-radius:999px;background:#edf5ff;color:#2468b3;font-size:10px}.status.completed{background:#edf9e8;color:#3f8f24}.flag{display:inline-block;margin:6px 4px 0 0;padding:2px 6px;border-radius:6px;background:#fff1e8;color:#c04f1a;font-size:10px}
+    .skeleton{height:64px;margin:12px;border-radius:8px;background:linear-gradient(90deg,#f3eeeb,#fff,#f3eeeb);background-size:200% 100%;animation:p 1.2s infinite}@keyframes p{to{background-position:-200% 0}}
+  </style>
+</head>
+<body>
+  <div class="top"><div><h1>Today</h1><div class="date" id="date"></div></div><button class="refresh" id="refresh">Refresh</button></div>
+  <div class="metrics" id="metrics"></div>
+  <section class="panel"><div class="panel-title" id="scheduleTitle">Today’s schedule</div><div id="schedule"><div class="skeleton"></div><div class="skeleton"></div></div></section>
+  <script>
+    const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}),clock=new Intl.DateTimeFormat('en-US',{hour:'numeric',minute:'2-digit'}),dayLabel=new Intl.DateTimeFormat('en-US',{weekday:'long',month:'long',day:'numeric'});
+    const active=new Set(['scheduled','confirmed','inProgress','completed']);
+    const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const list=v=>Array.isArray(v)?v.filter(Boolean):v?[v]:[];
+    const name=(v,f)=>v?([v.firstName,v.lastName].filter(Boolean).join(' ')||f):f;
+    const lines=a=>Array.isArray(a.appointmentServices)?a.appointmentServices:[];
+    const earning=a=>lines(a).reduce((n,x)=>n+Number(x?.priceAtBooking??x?.service?.price??0),0);
+    const services=a=>lines(a).map(x=>x?.service?.name).filter(Boolean);
+    const flags=a=>{const c=a.customer||{},v=list(c.skinSensitivities).map(String);if(c.skinSensitivitiesOther)v.push(c.skinSensitivitiesOther);return [...new Set(v.map(x=>x.trim()).filter(Boolean))]};
+    const metric=(label,value,hint,tone='',wide=false)=>`<div class="metric ${tone} ${wide?'wide':''}"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div><div class="hint">${esc(hint)}</div></div>`;
+    async function load(){
+      document.querySelector('#date').textContent=dayLabel.format(new Date());document.querySelector('#refresh').disabled=true;
+      document.querySelector('#schedule').innerHTML='<div class="skeleton"></div><div class="skeleton"></div>';
+      try{
+        const now=new Date(),start=new Date(now.getFullYear(),now.getMonth(),now.getDate()),end=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+        const filter={$and:[{startTime:{$gte:start.toISOString()}},{startTime:{$lt:end.toISOString()}}]};
+        const q=new URLSearchParams({paginate:'false',filter:JSON.stringify(filter),sort:'startTime',appends:'customer,staff,appointmentServices.service'});
+        const token=parent.localStorage.getItem('NOCOBASE_TOKEN')||localStorage.getItem('NOCOBASE_TOKEN');
+        const response=await fetch('/api/appointments:list?'+q,{headers:token?{Authorization:'Bearer '+token}:{}});if(!response.ok)throw new Error('Request failed');
+        const payload=await response.json(),rows=Array.isArray(payload.data)?payload.data:(payload.data?.data||[]),items=rows.filter(x=>active.has(x.status));
+        const expected=items.reduce((n,x)=>n+earning(x),0),current=rows.filter(x=>x.status==='completed').reduce((n,x)=>n+earning(x),0),flagged=items.filter(x=>flags(x).length),unassigned=items.filter(x=>!x.staffId&&!x.staff).length;
+        document.querySelector('#metrics').innerHTML=metric('Appointments',items.length,rows.length===items.length?'scheduled today':`${rows.length-items.length} cancelled / no-show`)+metric('Expected earnings',money.format(expected),'active bookings','good')+metric('Current earnings',money.format(current),'completed today','info')+metric('Safety flags',flagged.length,flagged.length?'review before service':'none flagged',flagged.length?'danger':'good')+metric('Unassigned',unassigned,unassigned?'needs staff attention':'all appointments covered',unassigned?'warn':'good',true);
+        document.querySelector('#scheduleTitle').textContent=`Today’s schedule (${items.length})`;
+        document.querySelector('#schedule').innerHTML=items.length?items.map(x=>{const f=flags(x);return `<article class="appt"><div class="time">${esc(clock.format(new Date(x.startTime)))}</div><div><div class="line"><span class="customer">${esc(name(x.customer,'Customer'))}</span><span class="price">${esc(money.format(earning(x)))}</span></div><div class="sub">${esc(services(x).join(', ')||x.category||'Appointment')}</div><div class="sub">${esc(name(x.staff,x.staffId?'Staff assigned':'Unassigned'))}</div>${f.map(v=>`<span class="flag">${esc(v)}</span>`).join('')}<br><span class="status ${x.status==='completed'?'completed':''}">${esc(x.status||'Unknown')}</span></div></article>`}).join(''):'<div class="empty">No active appointments today</div>';
+      }catch(e){document.querySelector('#metrics').innerHTML='';document.querySelector('#schedule').innerHTML='<div class="error">Today’s dashboard could not be loaded. Tap Refresh to try again.</div>'}
+      finally{document.querySelector('#refresh').disabled=false}
+    }
+    document.querySelector('#refresh').addEventListener('click',load);load();
+  </script>
+</body>
+</html>

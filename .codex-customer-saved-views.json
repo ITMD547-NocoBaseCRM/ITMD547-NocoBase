@@ -1,0 +1,41 @@
+{
+  "name": "customerSavedViews",
+  "title": "Customer saved views",
+  "description": "Per-user saved filter and sort views for the Customers page",
+  "template": "general",
+  "fields": [
+    {
+      "name": "name",
+      "title": "View name",
+      "interface": "input",
+      "required": true
+    },
+    {
+      "name": "kind",
+      "title": "View kind",
+      "interface": "select",
+      "enum": [
+        { "value": "system", "label": "System", "color": "blue" },
+        { "value": "custom", "label": "Custom", "color": "green" }
+      ],
+      "defaultValue": "custom"
+    },
+    {
+      "name": "state",
+      "title": "Filter state",
+      "interface": "json"
+    },
+    {
+      "name": "position",
+      "title": "Position",
+      "interface": "integer",
+      "defaultValue": 0
+    },
+    {
+      "name": "isCurrent",
+      "title": "Current view",
+      "interface": "checkbox",
+      "defaultValue": false
+    }
+  ]
+}

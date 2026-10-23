@@ -10,7 +10,10 @@ const { createClient, formatErrors } = require('./nocobase-api');
 const COLLECTION = 'employeeShifts';
 const FILTER = {
   logic: '$and',
-  items: [{ path: 'status', operator: '$ne', value: 'onLeave' }],
+  items: [
+    { path: 'status', operator: '$ne', value: 'onLeave' },
+    { path: 'status', operator: '$ne', value: 'cancelled' },
+  ],
 };
 // Use the shift's stored display label. Relation-backed staff.firstName can be absent from
 // the calendar's immediate event payload, causing valid shifts to render as "Untitle".
