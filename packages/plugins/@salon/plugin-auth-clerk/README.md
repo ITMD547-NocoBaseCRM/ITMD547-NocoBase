@@ -9,7 +9,7 @@ the existing NocoBase password login stays available as the administrator fallba
 - Client: Clerk's React `<SignIn>` (`@clerk/react@6`) as a tab on both sign-in pages:
   - `/signin` (legacy client; this app runs in `legacy-default` entry mode, so this is the default page)
   - `/v/signin` (modern client)
-- Admin page **Settings → Staff sign-in (Clerk)** (`/admin/settings/auth-clerk` and `/v/admin/settings/auth-clerk`)
+- Admin page **Settings → Clerk Auth** (`/admin/settings/auth-clerk` and `/v/admin/settings/auth-clerk`)
   to **invite staff**, link, disable and unlink staff accounts, and resend or revoke invitations.
 - Public invitation page **`/staff-invite`** (and `/v/staff-invite`) where invited staff create their Clerk
   sign-in and choose their own password (see [Invitation-only registration](#invitation-only-registration)).
@@ -177,7 +177,7 @@ On Windows without Developer Mode, the NocoBase CLI cannot create symlinks for w
 
 1. Set the `CLERK_*` variables and restart.
 2. Sign in with the **password** login as an administrator.
-3. **Settings → Staff sign-in (Clerk)**: the info banner must say Clerk is configured (otherwise it lists what
+3. **Settings → Clerk Auth**: the info banner must say Clerk is configured (otherwise it lists what
    is missing). Link the first staff accounts (next section).
 4. **Settings → Authentication → Authenticators**: enable **clerk** (title "Staff sign-in"). Keep **basic**
    (Password) enabled. Optionally sort `clerk` first so it is the default tab.
@@ -191,7 +191,7 @@ has verified everything itself.
 
 ### Workflow
 
-1. **Administrator:** Settings → Staff sign-in (Clerk) → **Invite staff**. Enter the staff email and pick the
+1. **Administrator:** Settings → Clerk Auth → **Invite staff**. Enter the staff email and pick the
    existing NocoBase user. The server checks the user exists, holds a staff role, isn't `root` and isn't already
    linked, and that no other pending invitation exists for that email or user. It then:
    - stores the invitation (`clerkStaffInvitations`) with the target user and a random nonce. **The target user
@@ -266,7 +266,7 @@ Linking is always an explicit administrator action, recorded with `createdBy`:
 
 1. The staff member signs up or is invited in Clerk (Clerk Dashboard → Users → Invite/Create) with the same
    email they use at work.
-2. Administrator: **Settings → Staff sign-in (Clerk) → Link staff account**.
+2. Administrator: **Settings → Clerk Auth → Link staff account**.
 3. Search Clerk by **exact email** or **Clerk user ID**. The server queries Clerk; nothing is linked yet.
 4. Pick the Clerk account, then pick the **existing** NocoBase user yourself (the email is shown only to help
    you confirm it is the same person). Save. The server re-checks the Clerk user exists. One Clerk account ↔ one
