@@ -29,7 +29,7 @@ export class PluginAuthClerkClient extends Plugin {
     });
 
     this.app.pluginSettingsManager.add('auth-clerk', {
-      title: this.app.i18n.t('Staff sign-in (Clerk)', { ns: namespace }),
+      title: this.app.i18n.t('Clerk Auth', { ns: namespace }),
       icon: 'TeamOutlined',
       aclSnippet,
       componentLoader: () => import('./StaffLinksSettings'),

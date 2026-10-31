@@ -16,7 +16,7 @@ export class PluginAuthClerkClientV2 extends Plugin {
 
     this.pluginSettingsManager.addMenuItem({
       key: 'auth-clerk',
-      title: this.t('Staff sign-in (Clerk)'),
+      title: this.t('Clerk Auth'),
       icon: 'TeamOutlined',
       aclSnippet,
     });
