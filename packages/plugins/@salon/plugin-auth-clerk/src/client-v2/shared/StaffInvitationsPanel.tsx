@@ -203,9 +203,6 @@ export function StaffInvitationsPanel(props: {
 
   return (
     <Space direction="vertical" style={{ display: 'flex' }}>
-      <Typography.Title level={5} style={{ margin: 0 }}>
-        {t('Staff invitations')}
-      </Typography.Title>
       <Typography.Text type="secondary">
         {t(
           'Invite new staff to create their own Clerk sign-in. They are linked to the NocoBase user you choose only after Clerk confirms the invitation was accepted.',
