@@ -47,6 +47,11 @@ export function staffInvitationActions(getServices: () => ClerkServices) {
       await next();
     },
 
+    async destroy(ctx: Context, next: Next) {
+      await run(ctx, () => getServices().invitations.destroy(ctx.action.params.filterByTk));
+      await next();
+    },
+
     /**
      * Public: called by the invitation page with the new Clerk account's session token in the
      * `X-Clerk-Session-Token` header. Body and query parameters are ignored entirely.

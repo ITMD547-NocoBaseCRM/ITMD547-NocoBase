@@ -236,6 +236,28 @@ export class StaffInvitations {
   }
 
   /**
+   * Removes an invitation in any state. A pending one is revoked in Clerk first so its emailed link
+   * stops working. Links created by an accepted invitation are kept; use "Unlink" to remove access.
+   */
+  async destroy(id: unknown) {
+    const record = id ? await this.repo.findOne({ filterByTk: id as any }) : null;
+    if (!record) throw fail(404, ClerkErrorCode.NOT_INVITED, 'Invitation not found.');
+    const clerkInvitationId = record.get('clerkInvitationId');
+    if (record.get('status') === 'pending' && clerkInvitationId) {
+      try {
+        await this.deps.getClerkApi().revokeInvitation(clerkInvitationId);
+      } catch (error: any) {
+        if (!(error?.status >= 400 && error?.status < 500)) {
+          throw fail(502, ClerkErrorCode.UNAVAILABLE, 'Clerk could not be reached. Try again.');
+        }
+      }
+    }
+    await this.repo.destroy({ filterByTk: record.get('id') });
+    this.deps.logger.info('auth-clerk: staff invitation deleted', { invitationId: record.get('id') });
+    return { id: record.get('id') };
+  }
+
+  /**
    * Links a freshly registered Clerk account to the invitation's NocoBase user. Every fact used is
    * fetched server-side; repeating the call with the same account is a harmless no-op.
    */

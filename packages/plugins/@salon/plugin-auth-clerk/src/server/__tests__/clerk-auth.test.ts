@@ -542,11 +542,11 @@ describe('Clerk staff authentication', () => {
       const id = res.body.data.id;
       expect((await staff.post(`/clerkStaffInvitations:revoke?filterByTk=${id}`)).status).toBe(403);
       expect((await staff.post(`/clerkStaffInvitations:resend?filterByTk=${id}`)).status).toBe(403);
+      expect((await staff.post(`/clerkStaffInvitations:destroy?filterByTk=${id}`)).status).toBe(403);
       const rootAgent = await asRoot();
       expect(
         (await rootAgent.post(`/clerkStaffInvitations:update?filterByTk=${id}`).send({ status: 'accepted' })).status,
       ).toBe(403);
-      expect((await rootAgent.post(`/clerkStaffInvitations:destroy?filterByTk=${id}`)).status).toBe(403);
       expect((await rootAgent.get(`/clerkStaffInvitations:get?filterByTk=${id}`)).status).toBe(403);
 
       const owner =
@@ -648,6 +648,24 @@ describe('Clerk staff authentication', () => {
       expect(expired.status).toBe(410);
       expect(errorOf(expired)).toMatch(/expired/);
       expect(await repo(linksCollection).count()).toBe(0);
+    });
+
+    it('deletes invitations in any state, revoking pending ones in Clerk and keeping accepted links', async () => {
+      const res = await invite({ email: 'delete@salon.test', userId: users.newHire.id });
+      const id = res.body.data.id;
+      const clerkId = (await invitationRow(id)).get('clerkInvitationId');
+      const deleted = await (await asRoot()).post(`/clerkStaffInvitations:destroy?filterByTk=${id}`);
+      expect(deleted.status).toBe(200);
+      expect(await invitationRow(id)).toBeNull();
+      expect(clerk.revokedInvitations).toContain(clerkId);
+      expect((await (await asRoot()).post(`/clerkStaffInvitations:destroy?filterByTk=${id}`)).status).toBe(404);
+
+      const row = await inviteAndRegister(users.newHire2, 'accepted-delete@salon.test', 'user_accepted_delete');
+      expect((await accept(token('user_accepted_delete', 'sess_accepted_delete'))).status).toBe(200);
+      const acceptedId = row.get('id');
+      expect((await (await asRoot()).post(`/clerkStaffInvitations:destroy?filterByTk=${acceptedId}`)).status).toBe(200);
+      expect(await invitationRow(acceptedId)).toBeNull();
+      expect(await repo(linksCollection).count({ filter: { userId: users.newHire2.id } })).toBe(1);
     });
 
     it('resend replaces the Clerk invitation and keeps the server-side pairing', async () => {
