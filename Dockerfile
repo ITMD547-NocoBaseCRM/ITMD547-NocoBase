@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM node:22-bookworm-slim
 
 WORKDIR /app
@@ -8,9 +9,11 @@ COPY package.json yarn.lock lerna.json .env.e2e.example ./
 COPY tsconfig.json tsconfig.paths.json tsconfig.server.json ./
 COPY packages ./packages
 
-RUN yarn install --frozen-lockfile --production=false --link-duplicates --cache-folder /tmp/yarn-cache \
-    && yarn build \
-    && rm -rf /tmp/yarn-cache
+# The cache mount persists yarn's download cache across image builds on the same
+# host, so rebuilds install from local disk instead of re-downloading every package.
+RUN --mount=type=cache,target=/tmp/yarn-cache \
+    yarn install --frozen-lockfile --production=false --link-duplicates --cache-folder /tmp/yarn-cache \
+    && yarn build
 
 ENV NODE_ENV=production
 ENV APP_ENV=production
