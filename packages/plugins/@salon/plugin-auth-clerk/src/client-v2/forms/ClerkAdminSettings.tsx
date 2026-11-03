@@ -12,7 +12,7 @@ export default function ClerkAdminSettings() {
       showIcon
       message={t('Clerk keys are configured with server environment variables (CLERK_*), not here.')}
       description={t(
-        'Link staff accounts under Settings → Staff sign-in (Clerk). Keep the Password authenticator enabled as the administrator fallback.',
+        'Link staff accounts under Settings → Clerk Auth. Keep the Password authenticator enabled as the administrator fallback.',
       )}
     />
   );

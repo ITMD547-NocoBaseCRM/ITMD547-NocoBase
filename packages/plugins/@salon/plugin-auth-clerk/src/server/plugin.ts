@@ -27,7 +27,7 @@ import staffLinksCollection from './schema/clerk-staff-links';
 import { StaffAccess } from './staff-access';
 
 /** The only invitation actions that exist; NocoBase's generic CRUD on the table is refused. */
-const INVITATION_ADMIN_ACTIONS = ['list', 'create', 'resend', 'revoke'];
+const INVITATION_ADMIN_ACTIONS = ['list', 'create', 'resend', 'revoke', 'destroy'];
 
 export class PluginAuthClerkServer extends Plugin {
   private configResult: ConfigResult;
@@ -131,6 +131,7 @@ export class PluginAuthClerkServer extends Plugin {
       [`${invitationsCollection}:create`]: invitationActions.create,
       [`${invitationsCollection}:resend`]: invitationActions.resend,
       [`${invitationsCollection}:revoke`]: invitationActions.revoke,
+      [`${invitationsCollection}:destroy`]: invitationActions.destroy,
       [`${invitationsCollection}:accept`]: invitationActions.accept,
     });
     this.app.acl.registerSnippet({

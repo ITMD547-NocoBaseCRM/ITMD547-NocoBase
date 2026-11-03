@@ -13,6 +13,7 @@ import {
   Space,
   Switch,
   Table,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -327,18 +328,41 @@ export function StaffLinksPage({ api }: { api: ApiClientLike }) {
             type="info"
             showIcon
             message={t('Only linked, enabled accounts with a staff role can sign in with Clerk.')}
-            description={`${t('Staff roles')}: ${status.allowedRoles.join(', ')} · ${t('Issuer')}: ${
-              status.issuer
-            } · ${t('Allowed origins')}: ${status.authorizedParties.join(', ')}`}
           />
         ) : null}
-        <Space>
-          <Button type="primary" onClick={() => setModalOpen(true)} disabled={!status?.configured}>
-            {t('Link staff account')}
-          </Button>
-          <Button onClick={load}>{t('Refresh')}</Button>
-        </Space>
-        <Table rowKey="id" loading={loading} dataSource={links} columns={columns as any} pagination={false} />
+        <Tabs
+          items={[
+            {
+              key: 'link',
+              label: t('Link'),
+              children: (
+                <Space direction="vertical" style={{ display: 'flex' }}>
+                  <Space>
+                    <Button type="primary" onClick={() => setModalOpen(true)} disabled={!status?.configured}>
+                      {t('Link staff account')}
+                    </Button>
+                    <Button onClick={load}>{t('Refresh')}</Button>
+                  </Space>
+                  <Table rowKey="id" loading={loading} dataSource={links} columns={columns as any} pagination={false} />
+                </Space>
+              ),
+            },
+            {
+              key: 'invite',
+              label: t('Invite'),
+              children: (
+                <StaffInvitationsPanel
+                  api={api}
+                  configured={!!status?.configured}
+                  allowedRoles={allowedRoles}
+                  inviteRedirectUrl={status?.configured ? status.inviteRedirectUrl : undefined}
+                  invitationTtlDays={status?.configured ? status.invitationTtlDays : undefined}
+                  onChanged={load}
+                />
+              ),
+            },
+          ]}
+        />
       </Space>
       <LinkModal
         api={api}
@@ -350,16 +374,6 @@ export function StaffLinksPage({ api }: { api: ApiClientLike }) {
           load();
         }}
       />
-      <div style={{ marginTop: 32 }}>
-        <StaffInvitationsPanel
-          api={api}
-          configured={!!status?.configured}
-          allowedRoles={allowedRoles}
-          inviteRedirectUrl={status?.configured ? status.inviteRedirectUrl : undefined}
-          invitationTtlDays={status?.configured ? status.invitationTtlDays : undefined}
-          onChanged={load}
-        />
-      </div>
     </Card>
   );
 }

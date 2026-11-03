@@ -146,7 +146,7 @@ export function StaffInvitationsPanel(props: {
     load();
   }, [load]);
 
-  const act = async (invitation: Invitation, action: 'resend' | 'revoke') => {
+  const act = async (invitation: Invitation, action: 'resend' | 'revoke' | 'destroy') => {
     setBusyId(invitation.id);
     try {
       await api.request({
@@ -155,7 +155,9 @@ export function StaffInvitationsPanel(props: {
         params: { filterByTk: invitation.id },
         skipNotify: true,
       });
-      message.success(action === 'resend' ? t('Invitation resent') : t('Invitation revoked'));
+      message.success(
+        { resend: t('Invitation resent'), revoke: t('Invitation revoked'), destroy: t('Invitation deleted') }[action],
+      );
       await load();
     } catch (e) {
       message.error(errorText(e));
@@ -182,30 +184,47 @@ export function StaffInvitationsPanel(props: {
     {
       title: t('Actions'),
       key: 'actions',
-      render: (_: any, row: Invitation) =>
-        row.status === 'pending' || row.status === 'expired' ? (
+      render: (_: any, row: Invitation) => {
+        const open = row.status === 'pending' || row.status === 'expired';
+        return (
           <Space size={0}>
-            <Button type="link" loading={busyId === row.id} onClick={() => act(row, 'resend')}>
-              {t('Resend')}
-            </Button>
+            {open ? (
+              <Button type="link" loading={busyId === row.id} onClick={() => act(row, 'resend')}>
+                {t('Resend')}
+              </Button>
+            ) : null}
+            {open ? (
+              <Popconfirm
+                title={t('Revoke this invitation? The emailed link stops working.')}
+                onConfirm={() => act(row, 'revoke')}
+              >
+                <Button type="link" danger disabled={busyId === row.id}>
+                  {t('Revoke')}
+                </Button>
+              </Popconfirm>
+            ) : null}
             <Popconfirm
-              title={t('Revoke this invitation? The emailed link stops working.')}
-              onConfirm={() => act(row, 'revoke')}
+              title={
+                row.status === 'accepted'
+                  ? t(
+                      'Delete this invitation record? The linked account keeps access; use Unlink on the Link tab to remove it.',
+                    )
+                  : t('Delete this invitation? The emailed link stops working.')
+              }
+              onConfirm={() => act(row, 'destroy')}
             >
               <Button type="link" danger disabled={busyId === row.id}>
-                {t('Revoke')}
+                {t('Delete')}
               </Button>
             </Popconfirm>
           </Space>
-        ) : null,
+        );
+      },
     },
   ];
 
   return (
     <Space direction="vertical" style={{ display: 'flex' }}>
-      <Typography.Title level={5} style={{ margin: 0 }}>
-        {t('Staff invitations')}
-      </Typography.Title>
       <Typography.Text type="secondary">
         {t(
           'Invite new staff to create their own Clerk sign-in. They are linked to the NocoBase user you choose only after Clerk confirms the invitation was accepted.',
