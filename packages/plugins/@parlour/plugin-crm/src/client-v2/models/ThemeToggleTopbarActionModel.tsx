@@ -1,6 +1,6 @@
 import { MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { TopbarActionModel, useGlobalTheme } from '@nocobase/client-v2';
-import { App, Button, Tooltip } from 'antd';
+import { App, Space, Switch, Tooltip } from 'antd';
 import React, { useState } from 'react';
 
 type ThemeItem = {
@@ -35,15 +35,19 @@ function ThemeToggleButton({ model }: { model: ThemeToggleTopbarActionModel }) {
 
   return (
     <Tooltip title={`Switch to ${nextThemeName}`}>
-      <Button
-        type="text"
-        aria-label={`Switch to ${nextThemeName} theme`}
-        data-testid={model.getTestId()}
-        icon={isDarkTheme ? <SunOutlined /> : <MoonOutlined />}
-        loading={loading}
-        onClick={switchTheme}
-        style={{ width: 46, height: 46, color: 'var(--nb-topbar-action-color)' }}
-      />
+      <Space size={6} align="center" style={{ height: 46, padding: '0 10px' }}>
+        <SunOutlined aria-hidden="true" style={{ color: 'var(--nb-topbar-action-color)' }} />
+        <Switch
+          checked={isDarkTheme}
+          loading={loading}
+          aria-label={`Switch to ${nextThemeName} theme`}
+          data-testid={model.getTestId()}
+          onChange={(checked) => {
+            if (checked !== isDarkTheme) void switchTheme();
+          }}
+        />
+        <MoonOutlined aria-hidden="true" style={{ color: 'var(--nb-topbar-action-color)' }} />
+      </Space>
     </Tooltip>
   );
 }
