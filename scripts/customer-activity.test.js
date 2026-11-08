@@ -241,6 +241,9 @@ test('customer messaging definitions are consistent: fields, workflow nodes and 
   const code = page.readToolbarScript();
   assert.ok(code.includes(`"collection":"${m.MESSAGES_COLLECTION}"`) && code.includes(`"emailChannel":"${m.EMAIL_CHANNEL_NAME}"`), 'toolbar does not carry the messaging settings');
   assert.ok(!code.includes('/*CUSTOMER_MESSAGING*/'));
+  assert.ok(code.includes(`"templatesCollection":"${m.TEMPLATES_COLLECTION}"`), 'toolbar does not carry the templates collection');
+  const templateFields = m.templatesCollectionDefinition().fields.map((f) => f.name);
+  for (const name of ['name', 'body', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy']) assert.ok(templateFields.includes(name), `smsTemplates lacks ${name}`);
 });
 
 test('the toolbar script embeds the rules, has no placeholder left and parses as an async module body', () => {

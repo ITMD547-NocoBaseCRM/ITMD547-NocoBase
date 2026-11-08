@@ -1,9 +1,10 @@
 // Applies customer messaging (Send message button on the Customers page) to the running NocoBase instance.
 //
-// Usage: yarn apply:customer-messaging [--check] [--sms-webhook-url <url>] [--sms-auth-header "<value>"]
+// Usage: yarn apply:customer-messaging [--check] [--skip-toolbar] [--sms-webhook-url <url>] [--sms-auth-header "<value>"]
 //
 // Idempotent, in order:
-//   1. creates the `customerMessages` collection (outbox and history) if missing;
+//   1. creates the `customerMessages` collection (outbox and history) and the `smsTemplates` collection (saved SMS
+//      templates) if missing, adding any fields they lack;
 //   2. creates and enables the workflow "Deliver customer messages" (collection event on new rows) if missing:
 //      email -> notification channel "customer-email", SMS -> HTTP POST to the SMS gateway, then marks the row sent;
 //   3. creates the "Customer messages" page under Salon Management if missing, with a table of the outbox;
@@ -11,6 +12,7 @@
 //
 // The SMS gateway URL is taken from --sms-webhook-url, else NOCOBASE_SMS_WEBHOOK_URL in .env, else a placeholder
 // that fails visibly. Change it later in the workflow's "Send SMS" node. --check reports and writes nothing.
+// --skip-toolbar leaves out step 4 (useful on an instance without the Customers page, such as a fresh local database).
 
 const {
   DELIVERY_WORKFLOW_TITLE,
@@ -21,6 +23,7 @@ const {
   deliveryWorkflowNodes,
   messagesCollectionDefinition,
   messagesPageBlueprint,
+  templatesCollectionDefinition,
 } = require('./customer-messaging');
 const { createClient, formatErrors, loadEnv } = require('./nocobase-api');
 
@@ -34,29 +37,36 @@ function readArg(name, fallback) {
 const fail = (what, result) => new Error(`${what} failed (${result.status}):\n${formatErrors(result.json)}`);
 const encode = (value) => encodeURIComponent(JSON.stringify(value));
 
-async function ensureCollection(client, check) {
-  const existing = await client.request(`collections:get?filterByTk=${MESSAGES_COLLECTION}`);
-  if (existing.ok && existing.json?.data?.name === MESSAGES_COLLECTION) return 'present';
+async function ensureCollection(client, check, definition) {
+  const { name } = definition;
+  const existing = await client.request(`collections:get?filterByTk=${name}`);
+  if (existing.ok && existing.json?.data?.name === name) return 'present';
   if (check) return 'missing';
-  const created = await client.request('collections:create', { method: 'POST', body: messagesCollectionDefinition() });
-  if (!created.ok) throw fail(`collections:create ${MESSAGES_COLLECTION}`, created);
+  const created = await client.request('collections:create', { method: 'POST', body: definition });
+  if (!created.ok) throw fail(`collections:create ${name}`, created);
   return 'created';
 }
 
 // Any field of the definition the live collection lacks (for example the bookkeeping fields on an older install).
-async function ensureFields(client, check) {
-  const list = await client.request(`collections/${MESSAGES_COLLECTION}/fields:list?paginate=false`);
+async function ensureFields(client, check, definition) {
+  const { name } = definition;
+  const list = await client.request(`collections/${name}/fields:list?paginate=false`);
   if (!list.ok) throw fail('fields:list', list);
   const present = new Set((list.json?.data || []).map((f) => f.name));
   const out = { present: [], created: [] };
-  for (const field of messagesCollectionDefinition().fields) {
+  for (const field of definition.fields) {
     if (present.has(field.name)) { out.present.push(field.name); continue; }
     if (check) { out.created.push(`${field.name} (dry run)`); continue; }
-    const created = await client.request(`collections/${MESSAGES_COLLECTION}/fields:create`, { method: 'POST', body: field });
-    if (!created.ok) throw fail(`fields:create ${MESSAGES_COLLECTION}.${field.name}`, created);
+    const created = await client.request(`collections/${name}/fields:create`, { method: 'POST', body: field });
+    if (!created.ok) throw fail(`fields:create ${name}.${field.name}`, created);
     out.created.push(field.name);
   }
   return out;
+}
+
+async function ensureCollectionWithFields(client, check, definition) {
+  const status = await ensureCollection(client, check, definition);
+  return status === 'missing' ? { status } : { status, fields: await ensureFields(client, check, definition) };
 }
 
 // The email channel the workflow sends through. NocoBase gives a channel created in the UI an internal name such as
@@ -194,6 +204,7 @@ async function refreshToolbar(check) {
 
 async function main() {
   const check = process.argv.includes('--check');
+  const skipToolbar = process.argv.includes('--skip-toolbar');
   const env = { ...loadEnv(), ...process.env };
   const client = await createClient();
   const emailChannel = await resolveEmailChannel(client, readArg('--email-channel', env.NOCOBASE_EMAIL_CHANNEL || ''));
@@ -212,11 +223,13 @@ async function main() {
   };
   const summary = { status: 'ok', mode: check ? 'check' : 'apply', target: client.baseUrl };
   summary.emailChannel = emailChannel ? { name: emailChannel.name, title: emailChannel.title, host: emailChannel.options?.host } : 'none configured (create an Email channel under Settings → Notification management, then re-run)';
-  summary.collection = await ensureCollection(client, check);
-  if (summary.collection !== 'missing') summary.fields = await ensureFields(client, check);
+  const messages = await ensureCollectionWithFields(client, check, messagesCollectionDefinition());
+  summary.collection = messages.status;
+  if (messages.fields) summary.fields = messages.fields;
+  summary.templatesCollection = await ensureCollectionWithFields(client, check, templatesCollectionDefinition());
   summary.workflow = await ensureWorkflow(client, check, nodeOptions);
   summary.page = await ensurePage(client, check);
-  summary.toolbar = await refreshToolbar(check);
+  summary.toolbar = skipToolbar ? 'skipped (--skip-toolbar)' : await refreshToolbar(check);
   const notes = [];
   if (smsProvider === 'webhook' && nodeOptions.smsWebhookUrl === SMS_WEBHOOK_PLACEHOLDER) notes.push('SMS not configured: set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM in .env (or NOCOBASE_SMS_WEBHOOK_URL for another gateway) and re-run.');
   if (!emailChannel) notes.push('No email channel: emails will fail with "channel not found" until one exists and the apply is re-run.');

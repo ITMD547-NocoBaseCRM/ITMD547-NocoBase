@@ -15,6 +15,7 @@
 // the Customers toolbar (the Send message button lives there: scripts/ui/customers-toolbar.js).
 
 const MESSAGES_COLLECTION = 'customerMessages';
+const TEMPLATES_COLLECTION = 'smsTemplates';
 const EMAIL_CHANNEL_NAME = 'customer-email';
 const DELIVERY_WORKFLOW_TITLE = 'Deliver customer messages';
 const MESSAGES_PAGE_TITLE = 'Customer messages';
@@ -88,6 +89,30 @@ function messagesCollectionDefinition() {
       datetime('sentAt', 'Sent at'),
       text('error', 'Error', 'TextArea'),
       text('batchKey', 'Batch'),
+      ...systemFields(),
+    ],
+  };
+}
+
+// Saved SMS templates (US-42). The body keeps the same placeholder tokens as customer messages ({{firstName}},
+// {{lastName}}, {{fullName}}; see renderTemplate) as literal text. Appointment placeholders are not supported because
+// the Send message dialog has no appointment data. The 50-template cap, name uniqueness and access rules are handled
+// separately.
+function templatesCollectionDefinition() {
+  return {
+    name: TEMPLATES_COLLECTION,
+    title: 'SMS Templates',
+    template: 'general',
+    logging: true,
+    createdBy: true,
+    updatedBy: true,
+    createdAt: true,
+    updatedAt: true,
+    titleField: 'name',
+    description: 'Saved SMS message templates a salon owner can reuse instead of writing each message from scratch.',
+    fields: [
+      text('name', 'Template name'),
+      text('body', 'Message', 'TextArea'),
       ...systemFields(),
     ],
   };
@@ -257,6 +282,7 @@ module.exports = {
   MESSAGES_PAGE_TITLE,
   SMS_WEBHOOK_PLACEHOLDER,
   STATUSES,
+  TEMPLATES_COLLECTION,
   deliveryWorkflowDefinition,
   deliveryWorkflowNodes,
   emailEnvelope,
@@ -265,4 +291,5 @@ module.exports = {
   renderTemplate,
   smsNodeConfig,
   systemFields,
+  templatesCollectionDefinition,
 };

@@ -168,7 +168,7 @@ function readRulesScriptForBrowser() {
 const MESSAGING_PLACEHOLDER = /\/\*CUSTOMER_MESSAGING\*\/\{[^\n]*?\};/;
 function messagingConfig() {
   const m = require('./customer-messaging');
-  return { collection: m.MESSAGES_COLLECTION, emailChannel: m.EMAIL_CHANNEL_NAME, pageTitle: m.MESSAGES_PAGE_TITLE };
+  return { collection: m.MESSAGES_COLLECTION, templatesCollection: m.TEMPLATES_COLLECTION, emailChannel: m.EMAIL_CHANNEL_NAME, pageTitle: m.MESSAGES_PAGE_TITLE };
 }
 function readToolbarScript() {
   const source = fs.readFileSync(TOOLBAR_SCRIPT_PATH, 'utf8');

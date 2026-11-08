@@ -118,7 +118,7 @@ const hasOtherFilters = (st) => !!((st.q || '').trim() || Object.values(st.sel).
 // ---- Send message (SMS / email) -------------------------------------------------------------------------------
 // Each recipient and channel becomes one row in the customerMessages outbox (status "queued"); the workflow
 // "Deliver customer messages" sends it. See docs/customer-activity-filters.md, section "Sending messages".
-const MSG = /*CUSTOMER_MESSAGING*/{"collection":"customerMessages","emailChannel":"customer-email","pageTitle":"Customer messages"};
+const MSG = /*CUSTOMER_MESSAGING*/{"collection":"customerMessages","templatesCollection":"smsTemplates","emailChannel":"customer-email","pageTitle":"Customer messages"};
 const CHANNEL_OPTS = [{ value: 'sms', label: 'SMS' }, { value: 'email', label: 'Email' }];
 const renderTemplate = (template, customer) => {
   const values = { firstName: customer.firstName || '', lastName: customer.lastName || '', fullName: [customer.firstName, customer.lastName].filter(Boolean).join(' ') };
@@ -222,6 +222,29 @@ function SendMessageDialog({ open, onClose, selected, viewFilter, viewCount }) {
   const [recipients, setRecipients] = useState(null);
   const [sending, setSending] = useState(false);
   const [emailChannelOk, setEmailChannelOk] = useState(null);
+  const [templates, setTemplates] = useState([]);
+
+  // Saved templates for the "Load template" control. Reloaded on every open; if the collection is missing or the
+  // user cannot read it, the control simply stays hidden.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await req(MSG.templatesCollection + ':list', { paginate: false, sort: ['name'], fields: ['id', 'name', 'body'] });
+        if (!cancelled) setTemplates(r.data || []);
+      } catch (e) { if (!cancelled) setTemplates([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
+  // Fills the message with the template's text; {{firstName}} etc. stay literal for renderTemplate.
+  const applyTemplate = (id) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    const fill = () => { setBody(t.body || ''); setBodyHtml(''); };
+    if (body.trim() || bodyHtml.trim()) Modal.confirm({ title: 'Replace the current message?', content: 'Loading "' + t.name + '" replaces what you have typed.', okText: 'Replace', onOk: fill });
+    else fill();
+  };
 
   useEffect(() => { if (open) { setAudience(selected.length ? 'selected' : 'view'); setRecipients(null); } }, [open]);
   // Load the recipients' contact details (only id, names, email, phone) for the chosen audience.
@@ -299,6 +322,7 @@ function SendMessageDialog({ open, onClose, selected, viewFilter, viewCount }) {
     wantsEmail && h('div', null, h('div', { style: { fontWeight: 600, marginBottom: 6 } }, 'Subject (email)'),
       h(Input, { value: subject, maxLength: 150, onChange: (e) => setSubject(e.target.value), placeholder: 'We miss you, {{firstName}}!' })),
     h('div', null, h('div', { style: { fontWeight: 600, marginBottom: 6 } }, wantsEmail ? 'Message' + (wantsSms ? ' (the SMS gets the plain text)' : '') : 'Message'),
+      templates.length > 0 && h(Select, { showSearch: true, value: null, placeholder: 'Load template', style: { width: '100%', marginBottom: 8 }, optionFilterProp: 'label', options: templates.map((t) => ({ value: t.id, label: t.name })), onChange: applyTemplate }),
       wantsEmail
         ? h(RichEditor, { html: bodyHtml, onChange: ({ html: nextHtml, text }) => { setBodyHtml(nextHtml); setBody(text.replace(/ /g, ' ').trim()); }, placeholder: 'Hi {{firstName}}, it has been a while since your last visit. Book this month and enjoy 15% off.' })
         : h(Input.TextArea, { value: body, rows: 5, onChange: (e) => { setBody(e.target.value); setBodyHtml(''); }, placeholder: 'Hi {{firstName}}, it has been a while since your last visit. Book this month and enjoy 15% off.' }),
