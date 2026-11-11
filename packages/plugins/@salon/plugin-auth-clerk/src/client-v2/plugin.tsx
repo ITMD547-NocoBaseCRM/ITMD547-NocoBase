@@ -16,14 +16,14 @@ export class PluginAuthClerkClientV2 extends Plugin {
 
     this.pluginSettingsManager.addMenuItem({
       key: 'auth-clerk',
-      title: this.t('Clerk Auth'),
+      title: this.t('Staff Access'),
       icon: 'TeamOutlined',
       aclSnippet,
     });
     this.pluginSettingsManager.addPageTabItem({
       menuKey: 'auth-clerk',
       key: 'index',
-      title: this.t('Clerk Auth'),
+      title: this.t('Staff Access'),
       aclSnippet,
       componentLoader: () => import('./pages/StaffLinksSettings'),
     });
