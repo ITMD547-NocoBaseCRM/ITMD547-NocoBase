@@ -118,7 +118,7 @@ function settingsCollectionDefinition() {
 const DEFAULT_EMAIL_SUBJECT = 'Reminder: Your appointment is coming up!';
 const DEFAULT_EMAIL_BODY = [
   '<p>Hi {{firstName}},</p>',
-  '<p>This is a friendly reminder that you have an appointment coming up at <strong>{{appointmentTime}}</strong> on <strong>{{appointmentDate}}</strong>.</p>',
+  '<p>This is a friendly reminder that you have an appointment with <strong>{{staffName}}</strong> at <strong>{{appointmentTime}}</strong> on <strong>{{appointmentDate}}</strong>.</p>',
   '<p>If you need to reschedule, please contact us as soon as possible.</p>',
   '<p>We look forward to seeing you!</p>',
 ].join('\n');
@@ -214,11 +214,13 @@ due AS (
     c."lastName",
     c.email,
     a."startTime",
+    COALESCE(st."firstName", 'your stylist') AS staff_name,
     TO_CHAR(a."startTime" AT TIME ZONE 'America/Chicago', 'FMDay, FMMonth FMDD, YYYY') AS appt_date,
     TO_CHAR(a."startTime" AT TIME ZONE 'America/Chicago', 'FMHH12:MI AM')              AS appt_time
   FROM "${REMINDERS_COLLECTION}" r
-  JOIN appointments a ON a.id = r."appointmentId"
-  JOIN customers    c ON c.id = r."customerId"
+  JOIN appointments a  ON a.id  = r."appointmentId"
+  JOIN customers    c  ON c.id  = r."customerId"
+  LEFT JOIN staff   st ON st.id = a."staffId"
   WHERE r.status = 'pending'
     AND r."scheduledFor" <= NOW()
     AND a.status IN ('scheduled', 'confirmed')
@@ -230,20 +232,23 @@ INSERT INTO "${MESSAGES_COLLECTION}" (channel, recipient, subject, body, "bodyHt
 SELECT
   'email',
   d.email,
-  REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_subject,
+  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_subject,
     '{{firstName}}', COALESCE(d."firstName",'')),
     '{{lastName}}',  COALESCE(d."lastName",'')),
+    '{{staffName}}', d.staff_name),
     '{{appointmentDate}}', d.appt_date),
     '{{appointmentTime}}', d.appt_time),
-  REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_body,
+  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_body,
     '{{firstName}}', COALESCE(d."firstName",'')),
     '{{lastName}}',  COALESCE(d."lastName",'')),
+    '{{staffName}}', d.staff_name),
     '{{appointmentDate}}', d.appt_date),
     '{{appointmentTime}}', d.appt_time),
   '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111827;max-width:640px">' ||
-  REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_body,
+  REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(s.tpl_body,
     '{{firstName}}', COALESCE(d."firstName",'')),
     '{{lastName}}',  COALESCE(d."lastName",'')),
+    '{{staffName}}', d.staff_name),
     '{{appointmentDate}}', d.appt_date),
     '{{appointmentTime}}', d.appt_time) || '</div>',
   'queued',

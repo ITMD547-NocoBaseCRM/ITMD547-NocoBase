@@ -161,10 +161,16 @@ describe('appointment-reminders definitions', () => {
       assert.ok(sql.includes('WITH settings AS'));
     });
 
-    it('replaces template variables', () => {
+    it('replaces template variables including staffName', () => {
       assert.ok(sql.includes("'{{firstName}}'"));
+      assert.ok(sql.includes("'{{staffName}}'"));
       assert.ok(sql.includes("'{{appointmentDate}}'"));
       assert.ok(sql.includes("'{{appointmentTime}}'"));
+    });
+
+    it('joins to the staff table', () => {
+      assert.ok(sql.includes('LEFT JOIN staff'));
+      assert.ok(sql.includes('staff_name'));
     });
 
     it('only picks pending reminders for scheduled/confirmed appointments', () => {
@@ -219,6 +225,7 @@ describe('appointment-reminders definitions', () => {
 
     it('body contains template variables', () => {
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{firstName}}'));
+      assert.ok(DEFAULT_EMAIL_BODY.includes('{{staffName}}'));
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{appointmentDate}}'));
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{appointmentTime}}'));
     });
