@@ -8,6 +8,8 @@ const {
   SETTINGS_COLLECTION,
   DEFAULT_EMAIL_SUBJECT,
   DEFAULT_EMAIL_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
+  DEFAULT_CONFIRMATION_BODY,
   settingsCollectionDefinition,
   remindersCollectionDefinition,
   processWorkflowDefinition,
@@ -59,9 +61,18 @@ describe('appointment-reminders definitions', () => {
       assert.strictEqual(field.defaultValue, true);
     });
 
-    it('includes email template fields', () => {
+    it('includes reminder email template fields', () => {
       assert.ok(def.fields.find((f) => f.name === 'emailSubject'), 'emailSubject should exist');
       assert.ok(def.fields.find((f) => f.name === 'emailBody'), 'emailBody should exist');
+    });
+
+    it('includes confirmation email fields', () => {
+      const enabled = def.fields.find((f) => f.name === 'confirmationEnabled');
+      assert.ok(enabled, 'confirmationEnabled should exist');
+      assert.strictEqual(enabled.type, 'boolean');
+      assert.strictEqual(enabled.defaultValue, true);
+      assert.ok(def.fields.find((f) => f.name === 'confirmationSubject'), 'confirmationSubject should exist');
+      assert.ok(def.fields.find((f) => f.name === 'confirmationBody'), 'confirmationBody should exist');
     });
 
     it('enabledIntervals enum matches INTERVALS', () => {
@@ -212,13 +223,16 @@ describe('appointment-reminders definitions', () => {
       assert.strictEqual(blocks[1].collection, REMINDERS_COLLECTION);
     });
 
-    it('form includes enabledIntervals field', () => {
+    it('form includes reminder and confirmation fields', () => {
       const form = bp.tabs[0].blocks[0];
       assert.ok(form.fields.includes('enabledIntervals'));
+      assert.ok(form.fields.includes('confirmationEnabled'));
+      assert.ok(form.fields.includes('confirmationSubject'));
+      assert.ok(form.fields.includes('confirmationBody'));
     });
   });
 
-  describe('default email template', () => {
+  describe('default reminder email template', () => {
     it('subject is a non-empty string', () => {
       assert.ok(DEFAULT_EMAIL_SUBJECT.length > 0);
     });
@@ -228,6 +242,20 @@ describe('appointment-reminders definitions', () => {
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{staffName}}'));
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{appointmentDate}}'));
       assert.ok(DEFAULT_EMAIL_BODY.includes('{{appointmentTime}}'));
+    });
+  });
+
+  describe('default confirmation email template', () => {
+    it('subject is a non-empty string', () => {
+      assert.ok(DEFAULT_CONFIRMATION_SUBJECT.length > 0);
+      assert.ok(DEFAULT_CONFIRMATION_SUBJECT.includes('scheduled'));
+    });
+
+    it('body contains all template variables', () => {
+      assert.ok(DEFAULT_CONFIRMATION_BODY.includes('{{firstName}}'));
+      assert.ok(DEFAULT_CONFIRMATION_BODY.includes('{{staffName}}'));
+      assert.ok(DEFAULT_CONFIRMATION_BODY.includes('{{appointmentDate}}'));
+      assert.ok(DEFAULT_CONFIRMATION_BODY.includes('{{appointmentTime}}'));
     });
   });
 });

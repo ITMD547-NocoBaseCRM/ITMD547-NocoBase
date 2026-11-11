@@ -183,8 +183,106 @@ export class PluginCrmServer extends Plugin {
       else run();
     };
 
+    // ─── Instant confirmation email on new appointment ────────────────────────
+    // When a new appointment is created (not updated), immediately queue a
+    // confirmation email through the customerMessages pipeline. Uses the
+    // confirmation template from appointmentReminderSettings, with the same
+    // {{firstName}}, {{staffName}}, {{appointmentDate}}, {{appointmentTime}}
+    // variables as reminders.
+
+    const DEFAULT_CONFIRMATION_SUBJECT = 'Your appointment has been scheduled!';
+    const DEFAULT_CONFIRMATION_BODY = [
+      '<p>Hi {{firstName}},</p>',
+      '<p>Your appointment with <strong>{{staffName}}</strong> has been scheduled for <strong>{{appointmentTime}}</strong> on <strong>{{appointmentDate}}</strong>.</p>',
+      '<p>If you need to make any changes, please don\'t hesitate to contact us.</p>',
+      '<p>We look forward to seeing you!</p>',
+    ].join('\n');
+    const EMAIL_ENVELOPE = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111827;max-width:640px">';
+
+    const replaceTemplateVars = (template: string, vars: Record<string, string>) =>
+      Object.entries(vars).reduce((t, [k, v]) => t.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v), template);
+
+    const sendConfirmationEmail = (model: any, options: any) => {
+      // Only on brand-new appointments, not updates.
+      if (!model.isNewRecord) return;
+      const status = model.get('status');
+      if (!['scheduled', 'confirmed'].includes(status)) return;
+      const customerId = model.get('customerId');
+      const staffId = model.get('staffId');
+      const startTime = model.get('startTime');
+      if (!customerId || !startTime) return;
+
+      const run = async () => {
+        try {
+          // Check that the messaging collection exists.
+          let msgRepo: any;
+          try { msgRepo = this.db.getRepository('customerMessages'); } catch { return; }
+          if (!msgRepo) return;
+
+          // Read settings (confirmation may be disabled).
+          let confirmationEnabled = true;
+          let subjectTpl = DEFAULT_CONFIRMATION_SUBJECT;
+          let bodyTpl = DEFAULT_CONFIRMATION_BODY;
+          try {
+            const settingsRepo = this.db.getRepository('appointmentReminderSettings');
+            if (settingsRepo) {
+              const settings = await settingsRepo.findOne({ sort: ['id'] });
+              if (settings) {
+                if (settings.get('confirmationEnabled') === false) return;
+                subjectTpl = settings.get('confirmationSubject') || subjectTpl;
+                bodyTpl = settings.get('confirmationBody') || bodyTpl;
+              }
+            }
+          } catch { /* settings collection may not exist yet; use defaults */ }
+
+          // Look up customer email and staff name.
+          const [customer, staff] = await Promise.all([
+            this.db.getRepository('customers').findOne({ filterByTk: customerId, fields: ['firstName', 'lastName', 'email'] }),
+            staffId
+              ? this.db.getRepository('staff').findOne({ filterByTk: staffId, fields: ['firstName'] })
+              : null,
+          ]);
+          const email = customer?.get('email');
+          if (!email) return; // no email on file — skip silently
+
+          const apptDate = new Date(startTime);
+          const vars: Record<string, string> = {
+            firstName: customer?.get('firstName')?.trim() || '',
+            lastName: customer?.get('lastName')?.trim() || '',
+            staffName: staff?.get('firstName')?.trim() || 'your stylist',
+            appointmentDate: apptDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+            appointmentTime: apptDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          };
+
+          const subject = replaceTemplateVars(subjectTpl, vars);
+          const body = replaceTemplateVars(bodyTpl, vars);
+
+          await msgRepo.create({
+            values: {
+              channel: 'email',
+              recipient: email,
+              subject,
+              body,
+              bodyHtml: `${EMAIL_ENVELOPE}${body}</div>`,
+              status: 'queued',
+              customerId,
+            },
+            hooks: false,
+          });
+          this.app.logger.info('[appointment-confirmation] queued for customer %s', customerId);
+        } catch (error: any) {
+          if (!String(error?.message).includes('does not exist') && !String(error?.message).includes('no such table')) {
+            this.app.logger.error('[appointment-confirmation] failed', error);
+          }
+        }
+      };
+      if (options?.transaction?.afterCommit) options.transaction.afterCommit(run);
+      else run();
+    };
+
     this.db.on('appointments.afterSave', (model: any, options: any) => {
       ensureReminders(model, options);
+      sendConfirmationEmail(model, options);
     });
     this.db.on('appointments.afterDestroy', (model: any, options: any) => {
       cancelReminders(model.get('id'), options);

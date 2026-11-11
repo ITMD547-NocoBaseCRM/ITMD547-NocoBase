@@ -107,19 +107,30 @@ function settingsCollectionDefinition() {
           enum: INTERVALS.map((i) => ({ value: i.value, label: i.label })),
         },
       },
-      text('emailSubject', 'Email subject'),
-      text('emailBody', 'Email body (HTML)', 'TextArea'),
+      text('emailSubject', 'Reminder email subject'),
+      text('emailBody', 'Reminder email body (HTML)', 'TextArea'),
+      boolean('confirmationEnabled', 'Send confirmation email on booking', true),
+      text('confirmationSubject', 'Confirmation email subject'),
+      text('confirmationBody', 'Confirmation email body (HTML)', 'TextArea'),
       ...systemFields(),
     ],
   };
 }
 
-// Default email template (used when the settings row has no custom template).
+// Default email templates (used when the settings row has no custom template).
 const DEFAULT_EMAIL_SUBJECT = 'Reminder: Your appointment is coming up!';
 const DEFAULT_EMAIL_BODY = [
   '<p>Hi {{firstName}},</p>',
   '<p>This is a friendly reminder that you have an appointment with <strong>{{staffName}}</strong> at <strong>{{appointmentTime}}</strong> on <strong>{{appointmentDate}}</strong>.</p>',
   '<p>If you need to reschedule, please contact us as soon as possible.</p>',
+  '<p>We look forward to seeing you!</p>',
+].join('\n');
+
+const DEFAULT_CONFIRMATION_SUBJECT = 'Your appointment has been scheduled!';
+const DEFAULT_CONFIRMATION_BODY = [
+  '<p>Hi {{firstName}},</p>',
+  '<p>Your appointment with <strong>{{staffName}}</strong> has been scheduled for <strong>{{appointmentTime}}</strong> on <strong>{{appointmentDate}}</strong>.</p>',
+  '<p>If you need to make any changes, please don\'t hesitate to contact us.</p>',
   '<p>We look forward to seeing you!</p>',
 ].join('\n');
 
@@ -317,6 +328,9 @@ function settingsPageBlueprint({ pageSchemaUid }) {
             collection: SETTINGS_COLLECTION,
             settings: {},
             fields: [
+              'confirmationEnabled',
+              'confirmationSubject',
+              'confirmationBody',
               'enabled',
               'enabledIntervals',
               'emailSubject',
@@ -375,6 +389,8 @@ function settingsPageBlueprint({ pageSchemaUid }) {
 }
 
 module.exports = {
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
   DEFAULT_EMAIL_BODY,
   DEFAULT_EMAIL_SUBJECT,
   INTERVALS,

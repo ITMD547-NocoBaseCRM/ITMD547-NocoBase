@@ -16,6 +16,8 @@
 // --check reports what would change and writes nothing.
 
 const {
+  DEFAULT_CONFIRMATION_BODY,
+  DEFAULT_CONFIRMATION_SUBJECT,
   DEFAULT_EMAIL_BODY,
   DEFAULT_EMAIL_SUBJECT,
   PROCESS_WORKFLOW_TITLE,
@@ -66,7 +68,24 @@ async function ensureFields(client, check, collectionName, definition) {
 
 async function ensureDefaultSettings(client, check) {
   const list = await client.request(`${SETTINGS_COLLECTION}:list?pageSize=1`);
-  if (list.ok && list.json?.data?.length > 0) return 'present';
+  if (list.ok && list.json?.data?.length > 0) {
+    // Backfill confirmation fields on existing row if missing.
+    const row = list.json.data[0];
+    if (row.confirmationEnabled == null || !row.confirmationSubject) {
+      if (!check) {
+        await client.request(`${SETTINGS_COLLECTION}:update?filterByTk=${row.id}`, {
+          method: 'POST',
+          body: {
+            confirmationEnabled: row.confirmationEnabled ?? true,
+            confirmationSubject: row.confirmationSubject || DEFAULT_CONFIRMATION_SUBJECT,
+            confirmationBody: row.confirmationBody || DEFAULT_CONFIRMATION_BODY,
+          },
+        });
+      }
+      return 'present (confirmation fields backfilled)';
+    }
+    return 'present';
+  }
   if (check) return 'missing (would seed default row)';
   const created = await client.request(`${SETTINGS_COLLECTION}:create`, {
     method: 'POST',
@@ -75,6 +94,9 @@ async function ensureDefaultSettings(client, check) {
       enabledIntervals: ['24h', '48h'],
       emailSubject: DEFAULT_EMAIL_SUBJECT,
       emailBody: DEFAULT_EMAIL_BODY,
+      confirmationEnabled: true,
+      confirmationSubject: DEFAULT_CONFIRMATION_SUBJECT,
+      confirmationBody: DEFAULT_CONFIRMATION_BODY,
     },
   });
   if (!created.ok) throw fail(`${SETTINGS_COLLECTION}:create (default row)`, created);
