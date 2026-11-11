@@ -59,6 +59,7 @@
     "seed:customer-activity": "node scripts/seed-customer-activity.js",
     "apply:customer-forms": "node scripts/apply-customer-forms.js",
     "apply:customer-messaging": "node scripts/apply-customer-messaging.js",
+    "apply:appointment-reminders": "node scripts/apply-appointment-reminders.js",
     "apply:customer-birthday": "node scripts/apply-customer-birthday.js"
   },
   "resolutions": {

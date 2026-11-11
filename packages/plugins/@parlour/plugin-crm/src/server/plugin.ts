@@ -1,4 +1,6 @@
 import { Plugin } from '@nocobase/server';
+import fs from 'node:fs';
+import path from 'node:path';
 import sql from 'mssql';
 
 const appointmentCalendarColor = (status: string, staffId: unknown) => {
@@ -81,9 +83,131 @@ export class PluginCrmServer extends Plugin {
       if (previous && String(previous) !== String(model.get('customerId'))) recount(previous, options);
     });
     this.db.on('appointments.afterDestroy', (model: any, options: any) => recount(model.get('customerId'), options));
+
+    // ─── Appointment reminders ─────────────────────────────────────────────────
+    // Manages the appointmentReminders rows that the scheduled "Process appointment
+    // reminders" workflow picks up every 15 minutes. When an appointment is created
+    // or rescheduled, one reminder row is created per enabled interval (1h, 2h, 12h,
+    // 24h, 48h). When an appointment is cancelled, noShow, or deleted, all pending
+    // reminders for it are cancelled. All work runs after the transaction commits so
+    // it never blocks the save and gracefully no-ops when the collection doesn't exist
+    // yet (apply-appointment-reminders not run).
+
+    const INTERVAL_HOURS: Record<string, number> = { '1h': 1, '2h': 2, '12h': 12, '24h': 24, '48h': 48 };
+
+    const remindersReady = () => {
+      try { return !!this.db.getRepository('appointmentReminders') && !!this.db.getRepository('appointmentReminderSettings'); }
+      catch { return false; }
+    };
+
+    const cancelReminders = (appointmentId: any, options: any) => {
+      if (!appointmentId) return;
+      const run = async () => {
+        try {
+          if (!remindersReady()) return;
+          await this.db.getRepository('appointmentReminders').update({
+            filter: { appointmentId, status: 'pending' },
+            values: { status: 'cancelled' },
+            hooks: false,
+          });
+        } catch (error: any) {
+          if (!String(error?.message).includes('does not exist') && !String(error?.message).includes('no such table')) {
+            this.app.logger.error('[appointment-reminders] cancel failed', error);
+          }
+        }
+      };
+      if (options?.transaction?.afterCommit) options.transaction.afterCommit(run);
+      else run();
+    };
+
+    const ensureReminders = (model: any, options: any) => {
+      const status = model.get('status');
+      const appointmentId = model.get('id');
+      const customerId = model.get('customerId');
+      const startTime = model.get('startTime');
+
+      // Cancel path: cancelled / noShow
+      if (status === 'cancelled' || status === 'noShow') {
+        cancelReminders(appointmentId, options);
+        return;
+      }
+
+      // Create path: only for scheduled / confirmed with a startTime
+      if (!['scheduled', 'confirmed'].includes(status) || !startTime || !appointmentId || !customerId) return;
+
+      const run = async () => {
+        try {
+          if (!remindersReady()) return;
+          const settingsRepo = this.db.getRepository('appointmentReminderSettings');
+          const settings = await settingsRepo.findOne({ sort: ['id'] });
+          if (!settings?.get('enabled')) return;
+          const intervals: string[] = settings.get('enabledIntervals') || [];
+          if (!intervals.length) return;
+
+          const repo = this.db.getRepository('appointmentReminders');
+          const start = new Date(startTime).getTime();
+          const now = Date.now();
+
+          for (const key of intervals) {
+            const hours = INTERVAL_HOURS[key];
+            if (!hours) continue;
+            const scheduledFor = new Date(start - hours * 60 * 60 * 1000);
+            if (scheduledFor.getTime() <= now) continue; // already past
+
+            const existing = await repo.findOne({ filter: { appointmentId, intervalKey: key } });
+            if (existing) {
+              // Update scheduledFor if appointment time changed and reminder is still pending.
+              if (existing.get('status') === 'pending' && new Date(existing.get('scheduledFor')).getTime() !== scheduledFor.getTime()) {
+                await repo.update({ filterByTk: existing.get('id'), values: { scheduledFor }, hooks: false });
+              }
+            } else {
+              await repo.create({ values: { appointmentId, customerId, intervalKey: key, scheduledFor, status: 'pending' }, hooks: false });
+            }
+          }
+
+          // Cancel reminders for intervals that were disabled since the appointment was created.
+          const enabledSet = new Set(intervals);
+          const allReminders = await repo.find({ filter: { appointmentId, status: 'pending' } });
+          for (const r of allReminders) {
+            if (!enabledSet.has(r.get('intervalKey'))) {
+              await repo.update({ filterByTk: r.get('id'), values: { status: 'cancelled' }, hooks: false });
+            }
+          }
+        } catch (error: any) {
+          if (!String(error?.message).includes('does not exist') && !String(error?.message).includes('no such table')) {
+            this.app.logger.error('[appointment-reminders] ensure failed', error);
+          }
+        }
+      };
+      if (options?.transaction?.afterCommit) options.transaction.afterCommit(run);
+      else run();
+    };
+
+    this.db.on('appointments.afterSave', (model: any, options: any) => {
+      ensureReminders(model, options);
+    });
+    this.db.on('appointments.afterDestroy', (model: any, options: any) => {
+      cancelReminders(model.get('id'), options);
+    });
   }
 
   async load() {
+    this.app.resourceManager.define({
+      name: 'salonMobileDashboard',
+      actions: {
+        get: async (ctx: any) => {
+          const dashboardPath = path.resolve(process.cwd(), 'scripts', 'ui', 'salon-mobile-dashboard.html');
+          ctx.withoutDataWrapping = true;
+          ctx.type = 'text/html; charset=utf-8';
+          ctx.set('Cache-Control', 'no-store');
+          ctx.body = fs.readFileSync(dashboardPath, 'utf8');
+        },
+      },
+    });
+    // The endpoint only serves the static dashboard shell. Its business-data requests still use
+    // the signed-in user's bearer token and normal collection ACL.
+    this.app.acl.allow('salonMobileDashboard', 'get', 'public');
+
     const server = process.env.AZURE_SQL_SERVER;
     const database = process.env.AZURE_SQL_DATABASE;
     const user = process.env.AZURE_SQL_USER;
