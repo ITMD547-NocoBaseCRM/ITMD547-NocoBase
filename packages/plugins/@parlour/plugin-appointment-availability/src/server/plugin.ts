@@ -11,6 +11,8 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
   async beforeLoad() {
     this.db.on('appointments.beforeCreate', async (model: any, options: any) => this.validateAppointment(model, options));
     this.db.on('appointments.beforeUpdate', async (model: any, options: any) => this.validateAppointment(model, options));
+    this.db.on('appointmentServices.beforeCreate', async (model: any, options: any) => this.validateAppointmentService(model, options));
+    this.db.on('appointmentServices.beforeUpdate', async (model: any, options: any) => this.validateAppointmentService(model, options));
     // The calendar paints a newly created/updated event from the mutation response before it
     // performs another list request. Populate its title before persistence so that first paint
     // contains the staff name instead of the calendar renderer's "N/A" fallback.
@@ -197,14 +199,55 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     await this.availability.applyExistingLeaves();
   }
 
-  private async validateAppointment(model: any, options?: any) {
+  private serviceIdsFromLines(value: unknown): string[] | null {
+    const lines = Array.isArray(value)
+      ? value
+      : Array.isArray((value as any)?.data)
+        ? (value as any).data
+        : Array.isArray((value as any)?.value)
+          ? (value as any).value
+        : null;
+    if (!lines) return null;
+    const ids = new Set<string>();
+    for (const line of lines as unknown[]) {
+      const id: unknown = line && typeof line === 'object'
+        ? (line as any)?.serviceId?.id ?? (line as any)?.serviceId ?? (line as any)?.service?.id ?? (line as any)?.id ?? (line as any)?.value
+        : line;
+      if (id != null && id !== '') ids.add(String(id));
+    }
+    return [...ids];
+  }
+
+  private submittedServiceIds(values: any, model: any): string[] | null {
+    const appointmentServices = this.serviceIdsFromLines(values.appointmentServices);
+    const selectedServices = [
+      this.serviceIdsFromLines(values.selectedServices),
+      this.serviceIdsFromLines(values.selectedServiceIds),
+    ].filter((ids): ids is string[] => ids !== null);
+    const selectionChanged = model.isNewRecord === true
+      || model.changed?.('selectedServices')
+      || model.changed?.('selectedServiceIds');
+    if (model.isNewRecord === true || selectionChanged) {
+      if (appointmentServices !== null || selectedServices.length) {
+        return [...new Set([...(appointmentServices || []), ...selectedServices.flat()])];
+      }
+      if (model.isNewRecord === true) return [];
+    }
+    return appointmentServices;
+  }
+
+  private async validateAppointment(model: any, options: any = {}) {
     const values = model.get ? model.get() : model;
-    const isExisting = values.id != null;
+    const isExisting = model.isNewRecord !== true && values.id != null;
     const reactivated = model.changed?.('status') && ['cancelled', 'noShow'].includes(model.previous?.('status')) && !['cancelled', 'noShow'].includes(values.status);
-    const schedulingChanged = !isExisting || reactivated || ['staffId', 'startTime', 'endTime'].some((field) => model.changed?.(field));
+    const schedulingChanged = !isExisting || reactivated || ['staffId', 'startTime', 'endTime', 'selectedServices', 'selectedServiceIds'].some((field) => model.changed?.(field));
     if (!schedulingChanged) return;
     if (!values.staffId || ['cancelled', 'noShow'].includes(values.status)) return;
     try {
+      const submittedServiceIds = this.submittedServiceIds(values, model);
+      const serviceIds = submittedServiceIds ?? (isExisting
+        ? await this.availability.appointmentServiceIds(values.id, options?.transaction)
+        : []);
       const service = new AvailabilityService(this.db, options?.transaction);
       await service.lockStaff([values.staffId, model.previous?.('staffId')]);
       await service.assertAvailable({
@@ -212,11 +255,41 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         startTime: values.startTime,
         endTime: values.endTime,
         excludeAppointmentId: values.id,
+        serviceIds,
+        transaction: options?.transaction,
       });
     } catch (error) {
       if (error instanceof AvailabilityError) throw error;
       this.app.logger.error('Appointment availability validation failed', { error: error instanceof Error ? error.message : 'unknown error' });
       throw new AvailabilityError('Availability could not be verified. Please try again.');
+    }
+  }
+
+  private async validateAppointmentService(model: any, options: any = {}) {
+    const values = model.get ? model.get() : model;
+    const isExisting = model.isNewRecord !== true && values.id != null;
+    const serviceLinkChanged = !isExisting || model.changed?.('appointmentId') || model.changed?.('serviceId');
+    if (!serviceLinkChanged || !values.appointmentId || !values.serviceId) return;
+
+    const appointment = await this.db.getRepository('appointments').findOne({
+      filterByTk: values.appointmentId,
+      fields: ['staffId', 'status'],
+      ...(options?.transaction ? { transaction: options.transaction } : {}),
+    });
+    if (!appointment) throw new AvailabilityError('The appointment could not be found while validating its service.');
+    const appointmentValues = appointment.get ? appointment.get() : appointment;
+    if (!appointmentValues.staffId || ['cancelled', 'noShow'].includes(appointmentValues.status)) return;
+
+    try {
+      await this.availability.assertStaffProvidesServices(
+        appointmentValues.staffId,
+        [values.serviceId],
+        options?.transaction,
+      );
+    } catch (error) {
+      if (error instanceof AvailabilityError) throw error;
+      this.app.logger.error('Appointment service eligibility validation failed', { error: error instanceof Error ? error.message : 'unknown error' });
+      throw new AvailabilityError('Service eligibility could not be verified. Please try again.');
     }
   }
 
