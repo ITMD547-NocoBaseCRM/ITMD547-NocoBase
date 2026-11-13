@@ -203,8 +203,6 @@ export class PluginCrmServer extends Plugin {
       Object.entries(vars).reduce((t, [k, v]) => t.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v), template);
 
     const sendConfirmationEmail = (model: any, options: any) => {
-      // Only on brand-new appointments, not updates.
-      if (!model.isNewRecord) return;
       const status = model.get('status');
       if (!['scheduled', 'confirmed'].includes(status)) return;
       const customerId = model.get('customerId');
@@ -257,19 +255,46 @@ export class PluginCrmServer extends Plugin {
           const subject = replaceTemplateVars(subjectTpl, vars);
           const body = replaceTemplateVars(bodyTpl, vars);
 
+          const htmlBody = `${EMAIL_ENVELOPE}${body}</div>`;
+
+          // Send immediately via the notification manager.
+          let sendStatus = 'queued';
+          let sendError: string | null = null;
+          try {
+            const notifPlugin: any = this.app.pm.get('notification-manager');
+            const manager = notifPlugin?.manager;
+            const channelRec = await this.db.getRepository('notificationChannels').findOne({ filter: { notificationType: 'email' } });
+            const channelName = channelRec?.get('name');
+            if (manager && channelName) {
+              await manager.send({
+                channelName,
+                message: { subject, html: htmlBody, contentType: 'html', to: [email] },
+                triggerFrom: 'appointmentConfirmation',
+              });
+              sendStatus = 'sent';
+              this.app.logger.info('[appointment-confirmation] sent to %s for customer %s', email, customerId);
+            }
+          } catch (sendErr: any) {
+            sendError = sendErr?.reason || sendErr?.message || 'send failed';
+            sendStatus = 'failed';
+            this.app.logger.error('[appointment-confirmation] send failed for customer %s: %s', customerId, sendError);
+          }
+
+          // Record in customerMessages for audit trail.
           await msgRepo.create({
             values: {
               channel: 'email',
               recipient: email,
               subject,
               body,
-              bodyHtml: `${EMAIL_ENVELOPE}${body}</div>`,
-              status: 'queued',
+              bodyHtml: htmlBody,
+              status: sendStatus,
+              sentAt: sendStatus === 'sent' ? new Date() : null,
+              error: sendError,
               customerId,
             },
             hooks: false,
           });
-          this.app.logger.info('[appointment-confirmation] queued for customer %s', customerId);
         } catch (error: any) {
           if (!String(error?.message).includes('does not exist') && !String(error?.message).includes('no such table')) {
             this.app.logger.error('[appointment-confirmation] failed', error);
@@ -282,6 +307,8 @@ export class PluginCrmServer extends Plugin {
 
     this.db.on('appointments.afterSave', (model: any, options: any) => {
       ensureReminders(model, options);
+    });
+    this.db.on('appointments.afterCreate', (model: any, options: any) => {
       sendConfirmationEmail(model, options);
     });
     this.db.on('appointments.afterDestroy', (model: any, options: any) => {
@@ -290,6 +317,69 @@ export class PluginCrmServer extends Plugin {
   }
 
   async load() {
+    // ─── Periodic email sender ──────────────────────────────────────────────────
+    // Processes queued customerMessages (channel='email') every 2 minutes.
+    // The scheduled reminder workflow inserts rows via raw SQL which bypasses
+    // collection events, so the "Deliver customer messages" workflow never fires
+    // for those. This timer acts as the delivery fallback for all queued emails.
+    const processQueuedEmails = async () => {
+      try {
+        const msgRepo = this.db.getRepository('customerMessages');
+        if (!msgRepo) return;
+        const queued = await msgRepo.find({
+          filter: { status: 'queued', channel: 'email' },
+          limit: 20,
+          sort: ['createdAt'],
+        });
+        if (!queued.length) return;
+
+        const notifPlugin: any = this.app.pm.get('notification-manager');
+        const manager = notifPlugin?.manager;
+        if (!manager) {
+          this.app.logger.warn('[email-sender] notification-manager plugin not available');
+          return;
+        }
+
+        for (const msg of queued) {
+          const id = msg.get('id');
+          const recipient = msg.get('recipient');
+          const subject = msg.get('subject');
+          const bodyHtml = msg.get('bodyHtml') || msg.get('body');
+          if (!recipient) {
+            await msgRepo.update({ filterByTk: id, values: { status: 'failed', error: 'No recipient' }, hooks: false });
+            continue;
+          }
+          try {
+            const channelName = (await this.db.getRepository('notificationChannels').findOne({
+              filter: { notificationType: 'email' },
+            }))?.get('name');
+            if (!channelName) {
+              this.app.logger.warn('[email-sender] no email notification channel configured');
+              return;
+            }
+            await manager.send({
+              channelName,
+              message: { subject, html: bodyHtml, contentType: 'html', to: [recipient] },
+              triggerFrom: 'crmEmailSender',
+            });
+            await msgRepo.update({ filterByTk: id, values: { status: 'sent', sentAt: new Date(), error: null }, hooks: false });
+            this.app.logger.info('[email-sender] sent to %s (msg %s)', recipient, id);
+          } catch (err: any) {
+            const reason = err?.reason || err?.message || 'unknown';
+            await msgRepo.update({ filterByTk: id, values: { status: 'failed', error: reason }, hooks: false });
+            this.app.logger.error('[email-sender] failed for msg %s: %s', id, reason);
+          }
+        }
+      } catch (err: any) {
+        if (!String(err?.message).includes('does not exist')) {
+          this.app.logger.error('[email-sender] processing error', err);
+        }
+      }
+    };
+    // Run once shortly after startup, then every 2 minutes
+    setTimeout(() => processQueuedEmails(), 15_000);
+    setInterval(() => processQueuedEmails(), 2 * 60 * 1000);
+
     this.app.resourceManager.define({
       name: 'salonMobileDashboard',
       actions: {
