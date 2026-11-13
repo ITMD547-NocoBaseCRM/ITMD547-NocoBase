@@ -5,6 +5,17 @@ const { Select, Alert, Spin } = ctx.libs.antd;
 const { useEffect, useRef, useState } = React;
 const h = React.createElement;
 
+const expectedAvailabilityMessages = new Set([
+  'This time is outside the staff member’s available schedule.',
+  'The selected staff member does not provide every selected service.',
+  'This staff member already has an appointment at that time.',
+]);
+const skipExpectedAvailabilityNotification = (error) => {
+  const errors = error?.response?.data?.errors;
+  return error?.response?.status === 409 && Array.isArray(errors) && errors.length > 0
+    && errors.every((item) => expectedAvailabilityMessages.has(item?.message));
+};
+
 const valueId = (value) => value && typeof value === 'object' ? value.id : value;
 const linesOf = (value) => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : Array.isArray(value?.value) ? value.value : [];
 const serviceIdOf = (line) => line?.serviceId?.id ?? line?.serviceId ?? line?.service?.id ?? line?.id ?? line?.value ?? line;
@@ -67,7 +78,7 @@ function AvailableStaffSelect() {
       if (requestId !== requestRef.current) return;
       const checked = await Promise.all(staffRows.map(async (item) => {
         try {
-          await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', data: {
+          await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', skipNotify: skipExpectedAvailabilityNotification, data: {
             staffId: item.id,
             startTime: start,
             endTime: end,
