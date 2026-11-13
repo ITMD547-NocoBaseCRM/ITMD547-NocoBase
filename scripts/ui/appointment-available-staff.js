@@ -6,6 +6,19 @@ const { useEffect, useRef, useState } = React;
 const h = React.createElement;
 
 const valueId = (value) => value && typeof value === 'object' ? value.id : value;
+const linesOf = (value) => Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : Array.isArray(value?.value) ? value.value : [];
+const serviceIdOf = (line) => line?.serviceId?.id ?? line?.serviceId ?? line?.service?.id ?? line?.id ?? line?.value ?? line;
+const selectedServiceIds = () => {
+  const ids = new Map();
+  const add = (item) => {
+    const id = serviceIdOf(item);
+    if (id != null && id !== '') ids.set(String(id), id);
+  };
+  for (const service of linesOf(ctx.formValues?.selectedServices)) add(service);
+  for (const line of linesOf(ctx.formValues?.appointmentServices)) add(line);
+  return [...ids.values()];
+};
+const record = ctx.getVar ? (await ctx.getVar('ctx.record')) || {} : ctx.record || {};
 const iso = (value) => {
   if (!value) return null;
   const date = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value);
@@ -32,8 +45,10 @@ function AvailableStaffSelect() {
   const current = ctx.getValue ? ctx.getValue() : ctx.value;
   const startValue = ctx.formValues?.startTime;
   const endValue = ctx.formValues?.endTime;
+  const serviceSignature = selectedServiceIds().map(String).sort().join(',');
 
   const load = async () => {
+    const serviceIds = selectedServiceIds();
     const start = iso(ctx.formValues?.startTime);
     if (!start) {
       setOptions([]); setLoading(false); setStatus('Choose an appointment start time.');
@@ -52,16 +67,30 @@ function AvailableStaffSelect() {
       if (requestId !== requestRef.current) return;
       const checked = await Promise.all(staffRows.map(async (item) => {
         try {
-          await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', data: { staffId: item.id, startTime: start, endTime: end } });
-          return item;
-        } catch (error) { return null; }
+          await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', data: {
+            staffId: item.id,
+            startTime: start,
+            endTime: end,
+            serviceIds,
+            excludeAppointmentId: record.id,
+          } });
+          return { item, available: true };
+        } catch (error) { return { item, available: false }; }
       }));
-      const available = checked.filter(Boolean)
-        .map((item) => ({ value: item.id, label: [item.firstName, item.lastName].filter(Boolean).join(' ') || 'Unnamed staff member' }));
-      setOptions(available);
-      setStatus(available.length ? available.length + ' staff available' : 'No staff available. You can continue and book this appointment without assigning staff.');
+      if (requestId !== requestRef.current) return;
+      const available = checked.filter((entry) => entry.available)
+        .map(({ item }) => ({ value: item.id, label: [item.firstName, item.lastName].filter(Boolean).join(' ') || 'Unnamed staff member' }));
       const selectedId = valueId(ctx.getValue ? ctx.getValue() : ctx.value);
-      if (selectedId != null && !available.some((item) => String(item.value) === String(selectedId)) && ctx.setValue) ctx.setValue(null);
+      const selectedIsAvailable = selectedId == null || available.some((item) => String(item.value) === String(selectedId));
+      if (!selectedIsAvailable) {
+        const selectedStaff = staffRows.find((item) => String(item.id) === String(selectedId)) || record.staff || {};
+        const selectedName = [selectedStaff.firstName, selectedStaff.lastName].filter(Boolean).join(' ') || 'Currently assigned staff';
+        available.unshift({ value: selectedId, label: `${selectedName} (not eligible)`, disabled: true });
+      }
+      setOptions(available);
+      setStatus(!selectedIsAvailable
+        ? 'The current staff member is not available for this time or does not provide every selected service. Choose another staff member or clear the assignment.'
+        : available.length ? `${available.length} staff available` : 'No staff available. You can continue and book this appointment without assigning staff.');
     } catch (error) {
       if (requestId !== requestRef.current) return;
       setOptions([]); setStatus('Staff availability is temporarily unavailable. You can continue and book without assigning staff.');
@@ -71,17 +100,17 @@ function AvailableStaffSelect() {
   };
 
   useEffect(() => {
-    const slot = String(startValue || '') + '|' + String(endValue || '');
+    const slot = [String(startValue || ''), String(endValue || ''), serviceSignature].join('|');
     if (slot === slotRef.current) return;
     slotRef.current = slot;
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(load, 250);
     return () => clearTimeout(timerRef.current);
-  }, [startValue, endValue]);
+  }, [startValue, endValue, serviceSignature]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const slot = String(ctx.formValues?.startTime || '') + '|' + String(ctx.formValues?.endTime || '');
+      const slot = [String(ctx.formValues?.startTime || ''), String(ctx.formValues?.endTime || ''), selectedServiceIds().map(String).sort().join(',')].join('|');
       if (slot === slotRef.current) return;
       slotRef.current = slot; load();
     }, 600);
