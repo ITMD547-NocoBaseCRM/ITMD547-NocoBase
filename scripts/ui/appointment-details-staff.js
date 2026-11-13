@@ -5,6 +5,26 @@ const { useEffect, useState } = React;
 const h = React.createElement;
 const record = (await ctx.getVar('ctx.record')) || {};
 
+const expectedAvailabilityMessages = new Set([
+  ‘This time is outside the staff member’s available schedule.’,
+  ‘The selected staff member does not provide every selected service.’,
+  ‘This staff member already has an appointment at that time.’,
+]);
+const skipExpectedAvailabilityNotification = (error) => {
+  const errors = error?.response?.data?.errors;
+  return error?.response?.status === 409 && Array.isArray(errors) && errors.length > 0
+    && errors.every((item) => expectedAvailabilityMessages.has(item?.message));
+};
+
+const listRecords = async (collection, filter, fields) => {
+  const resource = ctx.makeResource(‘MultiRecordResource’);
+  resource.setResourceName(collection);
+  resource.setPageSize(500);
+  if (filter) resource.setFilter(filter);
+  if (fields && resource.setFields) resource.setFields(fields);
+  await resource.refresh();
+  return Array.isArray(resource.getData?.()) ? resource.getData() : [];
+};
 const nameOf = (item) => [item?.firstName, item?.lastName].filter(Boolean).join(' ') || 'Staff member';
 
 async function availableOptions() {
@@ -13,9 +33,14 @@ async function availableOptions() {
   const endDate = record.endTime ? new Date(record.endTime) : new Date(start.getTime() + 60 * 60000);
   const startIso = start.toISOString();
   const endIso = endDate.toISOString();
-  const response = await ctx.api.request({ url: 'appointmentAvailability:availableStaff', method: 'post', data: { startTime: startIso, endTime: endIso, excludeAppointmentId: record.id } });
-  const payload = response?.data?.data ?? response?.data ?? {};
-  const options = (payload.staff || []).map((item) => ({ value: item.id, label: nameOf(item) }));
+  const staffRows = await listRecords('staff', { active: { $eq: 'active' } }, ['id', 'firstName', 'lastName', 'active']);
+  const checked = await Promise.all(staffRows.map(async (item) => {
+    try {
+      await ctx.api.request({ url: 'appointmentAvailability:check', method: 'post', skipNotify: skipExpectedAvailabilityNotification, data: { staffId: item.id, startTime: startIso, endTime: endIso, excludeAppointmentId: record.id } });
+      return item;
+    } catch (error) { return null; }
+  }));
+  const options = checked.filter(Boolean).map((item) => ({ value: item.id, label: nameOf(item) }));
   if (record.staff?.id && !options.some((item) => String(item.value) === String(record.staff.id))) {
     options.unshift({ value: record.staff.id, label: nameOf(record.staff) + ' (currently assigned, unavailable)', disabled: true });
   }

@@ -15,6 +15,20 @@ function plain(record: any) {
   return record?.get ? record.get({ plain: true }) : record;
 }
 
+function normalizeServiceIds(value: unknown): Array<number | string> {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new AvailabilityError('Selected services must be a list of IDs.');
+  const ids = new Map<string, number | string>();
+  for (const item of value) {
+    const id = item && typeof item === 'object' ? (item as { id?: unknown }).id : item;
+    if (id == null || id === '') continue;
+    const key = String(id);
+    if (!/^\d+$/.test(key)) throw new AvailabilityError('Selected services contain an invalid ID.');
+    ids.set(key, id as number | string);
+  }
+  return [...ids.values()];
+}
+
 function dateParts(value: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -303,6 +317,35 @@ export class AvailabilityService {
     return leaves.length > 0;
   }
 
+  async assertStaffProvidesServices(staffId: number | string, serviceIds: unknown, transaction?: any) {
+    const requestedIds = normalizeServiceIds(serviceIds);
+    if (!requestedIds.length) return;
+    const links = await this.db.getRepository('staffServices').find({
+      filter: { $and: [{ staffId }, { serviceId: { $in: requestedIds } }] },
+      fields: ['serviceId'],
+      ...(transaction ? { transaction } : {}),
+    });
+    const providedIds = new Set(links.map((record: any) => String(plain(record).serviceId)));
+    const missingIds = requestedIds.filter((id) => !providedIds.has(String(id)));
+    if (missingIds.length) {
+      throw new AvailabilityError('The selected staff member does not provide every selected service.');
+    }
+  }
+
+  async appointmentServiceIds(appointmentId: number | string, transaction?: any) {
+    const records = await this.db.getRepository('appointmentServices').find({
+      filter: { appointmentId },
+      fields: ['serviceId'],
+      ...(transaction ? { transaction } : {}),
+    });
+    const ids = new Map<string, number | string>();
+    for (const record of records) {
+      const serviceId = plain(record).serviceId;
+      if (serviceId != null) ids.set(String(serviceId), serviceId);
+    }
+    return [...ids.values()];
+  }
+
   async businessDayRange(date: string) {
     const settings = await this.settings();
     return {
@@ -311,8 +354,9 @@ export class AvailabilityService {
     };
   }
 
-  async assertAvailable(input: { staffId?: number | string; startTime: Date | string; endTime?: Date | string; durationMinutes?: number; excludeAppointmentId?: number | string }) {
+  async assertAvailable(input: { staffId?: number | string; startTime: Date | string; endTime?: Date | string; durationMinutes?: number; excludeAppointmentId?: number | string; serviceIds?: unknown; transaction?: any }) {
     if (!input.staffId) return; // Appointments may be deliberately unassigned.
+    await this.assertStaffProvidesServices(input.staffId, input.serviceIds, input.transaction);
     const start = new Date(input.startTime);
     if (Number.isNaN(start.getTime())) throw new AvailabilityError('Choose a valid appointment start time.');
     const settings = await this.settings();

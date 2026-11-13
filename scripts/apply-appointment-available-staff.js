@@ -1,5 +1,4 @@
-// Replaces the Staff field in every New appointment form (List and Calendar quick-create)
-// with the availability-aware JS selector.
+// Replaces the Staff field in every appointment create/edit form with the service-aware availability selector.
 const fs = require('fs');
 const path = require('path');
 const { createClient, formatErrors, getSurface } = require('./nocobase-api');
@@ -50,78 +49,81 @@ async function updateForm(client, ref, check) {
   const form = findForms(tree).find((node) => node.uid === ref.uid);
   if (!form) throw new Error(`Appointment create form ${ref.uid} not found in its surface`);
   const current = staffItem(form);
+  if (!current) return { form: ref.uid, changed: false, skipped: 'Staff field not present' };
   const field = Array.isArray(current?.subModels?.field) ? current.subModels.field[0] : current?.subModels?.field;
   const oldCode = field?.stepParams?.jsSettings?.runJs?.code;
-  const wanted = FORM_LAYOUT_ROWS.flat().map(([fieldPath]) => fieldPath);
-  const present = formItemsByPath(form);
-  const missing = missingFormFields(form, wanted).filter((fieldPath) => fieldPath !== 'staff');
-  const removed = REMOVED_FORM_FIELDS.filter((fieldPath) => present[fieldPath]);
   const replaceStaff = oldCode !== CODE;
-  if (check) return {
-    form: ref.uid,
-    changed: replaceStaff || missing.length > 0 || removed.length > 0,
-    replaceStaff,
-    missing,
-    removed,
-    dryRun: true,
-  };
+  if (check) return { form: ref.uid, changed: replaceStaff, replaceStaff, dryRun: true };
+  if (!replaceStaff) return { form: ref.uid, changed: false, status: 'up to date' };
 
-  for (const fieldPath of removed) {
-    const result = await client.request('flowSurfaces:removeNode', {
-      method: 'POST',
-      body: { target: { uid: present[fieldPath] } },
-    });
-    if (!result.ok) throw fail(`remove ${fieldPath} on ${ref.uid}`, result);
+  const originalGrid = form.subModels?.grid;
+  const originalLayout = originalGrid?.props || {};
+  if (!originalGrid?.uid || !originalLayout.rows || !originalLayout.sizes || !originalLayout.rowOrder) {
+    throw new Error(`Appointment form ${ref.uid} has no restorable Staff grid layout`);
   }
-  const specs = Object.fromEntries(formFields().map((spec) => [spec.field, spec]));
-  for (const fieldPath of missing) {
-    const spec = specs[fieldPath] || { field: fieldPath };
-    const settings = { ...(spec.settings || {}), ...(spec.titleField ? { titleField: spec.titleField } : {}) };
-    const result = await client.request('flowSurfaces:addField', {
-      method: 'POST',
-      body: { target: { uid: form.uid }, fieldPath, settings },
-    });
-    if (!result.ok) throw fail(`add ${fieldPath} on ${ref.uid}`, result);
-  }
-  if (replaceStaff) {
-    if (current) {
-      const result = await client.request('flowSurfaces:removeNode', {
-        method: 'POST',
-        body: { target: { uid: current.uid } },
-      });
-      if (!result.ok) throw fail(`remove existing Staff field on ${ref.uid}`, result);
-    }
-    const added = await client.request('flowSurfaces:addField', {
-      method: 'POST',
-      body: {
-        target: { uid: form.uid },
-        fieldPath: 'staff',
-        renderer: 'js',
-        settings: { label: 'Staff', version: 'v2', code: CODE },
-      },
-    });
-    if (!added.ok) throw fail(`add availability-aware Staff field on ${ref.uid}`, added);
-  }
+
+  const removed = await client.request('flowSurfaces:removeNode', {
+    method: 'POST',
+    body: { target: { uid: current.uid } },
+  });
+  if (!removed.ok) throw fail(`remove existing Staff field on ${ref.uid}`, removed);
+
+  const added = await client.request('flowSurfaces:addField', {
+    method: 'POST',
+    body: {
+      target: { uid: form.uid },
+      fieldPath: 'staff',
+      renderer: 'js',
+      settings: { label: 'Staff', version: 'v2', code: CODE },
+    },
+  });
+  if (!added.ok) throw fail(`add availability-aware Staff field on ${ref.uid}`, added);
 
   const freshTree = await getSurface(client, { uid: ref.uid });
   const fresh = findForms(freshTree).find((node) => node.uid === ref.uid);
   if (!fresh) throw new Error(`Updated appointment create form ${ref.uid} not found`);
+  const freshStaff = staffItem(fresh);
+  if (!freshStaff) throw new Error(`Updated appointment form ${ref.uid} has no Staff field`);
+  const validItems = new Set((fresh.subModels?.grid?.subModels?.items || []).map((item) => item.uid));
+  const rows = {};
+  const sizes = {};
+  const rowOrder = [];
+  for (const row of originalLayout.rowOrder) {
+    const cells = originalLayout.rows[row] || [];
+    const rowSizes = originalLayout.sizes[row] || [];
+    const keptCells = [];
+    const keptSizes = [];
+    cells.forEach((cell, index) => {
+      const kept = cell
+        .map((uid) => uid === current.uid ? freshStaff.uid : uid)
+        .filter((uid) => validItems.has(uid));
+      if (kept.length) {
+        keptCells.push(kept);
+        keptSizes.push(rowSizes[index] || 24);
+      }
+    });
+    if (keptCells.length) {
+      rows[row] = keptCells;
+      sizes[row] = keptSizes;
+      rowOrder.push(row);
+    }
+  }
   const layout = await client.request('flowSurfaces:setLayout', {
     method: 'POST',
     body: { target: { uid: fresh.subModels.grid.uid }, ...completeFormLayout(fresh) },
   });
-  if (!layout.ok) throw fail(`restore New appointment form layout on ${ref.uid}`, layout);
-  return { form: ref.uid, changed: replaceStaff || missing.length > 0 || removed.length > 0, layoutAligned: true };
+  if (!layout.ok) throw fail(`restore appointment form layout on ${ref.uid}`, layout);
+  return { form: ref.uid, changed: true, layoutPreserved: true };
 }
 
 async function main() {
   const check = process.argv.includes('--check');
   const client = await createClient();
   const forms = (await listAll(client)).filter(
-    (model) => model.use === 'CreateFormModel'
+    (model) => /^(Create|Edit)FormModel$/.test(model.use)
       && model.stepParams?.resourceSettings?.init?.collectionName === 'appointments',
   );
-  if (!forms.length) throw new Error('No appointment create forms found');
+  if (!forms.length) throw new Error('No appointment create/edit forms found');
   const results = [];
   for (const form of forms) results.push(await updateForm(client, form, check));
   console.log(JSON.stringify({
