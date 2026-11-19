@@ -1,0 +1,25 @@
+{
+  "name": "@salon/plugin-auth-clerk",
+  "displayName": "Auth: Clerk (staff)",
+  "description": "Staff sign-in through Clerk. Clerk proves identity; NocoBase keeps authorization. Only administrator-linked staff accounts can sign in.",
+  "version": "0.1.0",
+  "main": "dist/server/index.js",
+  "license": "Apache-2.0",
+  "keywords": [
+    "Authentication"
+  ],
+  "devDependencies": {
+    "@clerk/backend": "3.25.0",
+    "@clerk/react": "6.17.8"
+  },
+  "peerDependencies": {
+    "@nocobase/actions": "2.x",
+    "@nocobase/auth": "2.x",
+    "@nocobase/client": "2.x",
+    "@nocobase/client-v2": "2.x",
+    "@nocobase/database": "2.x",
+    "@nocobase/plugin-auth": "2.x",
+    "@nocobase/server": "2.x",
+    "@nocobase/test": "2.x"
+  }
+}
