@@ -72,6 +72,12 @@ async function applyRbac(request, { spec, check = false, log = () => {} } = {}) 
       const last = chain[chain.length - 1];
       if (last.type !== 'tabs') descendants(last.id).forEach((id) => ids.add(id));
     }
+    for (const path of menus.exclude || []) {
+      const chain = resolvePath(path);
+      if (!chain) continue;
+      const last = chain[chain.length - 1];
+      [last.id, ...descendants(last.id)].forEach((id) => ids.delete(id));
+    }
     return [...ids];
   };
 

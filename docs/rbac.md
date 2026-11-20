@@ -111,9 +111,9 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Role | Menu |
 |---|---|
 | Admin | unchanged (all pages and settings) |
-| Manager | whole Beauty Within Portal: Dashboard, Customers (+ Notes, Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Customer Notes, Message History, Messages, Statistics (all tabs), Reminder Settings. No settings centre. |
-| Receptionist | Dashboard, Customers (List, Notes, Reviews), Appointments, Shifts, Services, Memberships, Customer Notes (+ hidden detail pages they link to) |
-| Staff | Dashboard, Appointments, Shifts, Customers (List, Notes), Customer Notes, Services (Service List), Statistics → Staff Performance only |
+| Manager | Beauty Within Portal: Dashboard, Customers (List, Customer Notes, Customer Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Messages (Send, History, Appointment Reminder tabs), Statistics (all tabs). The standalone Customer Notes, Message History and Reminder Settings pages stay hidden (they duplicate those tabs). No settings centre. |
+| Receptionist | Dashboard, Customers (List, Customer Notes, Customer Reviews), Appointments, Shifts, Services, Memberships (+ hidden detail pages they link to) |
+| Staff | Dashboard, Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
 | Member | **Access Pending** page only (top-level). Own profile, language and sign-out stay in the avatar menu. |
 
 Typing a URL for a page that isn't granted shows 404, and its data API answers 403. Settings URLs still draw the

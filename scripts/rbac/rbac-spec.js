@@ -88,7 +88,13 @@ const ROLES = {
       users: [a('view', { fields: [...USER_PUBLIC, 'email', 'staff', 'createdAt', 'updatedAt'] })],
       roles: [a('view', { fields: ['name', 'title', 'description'] })],
     },
-    menus: { include: [['Beauty Within Portal']] },
+    // The whole portal except standalone pages that duplicate a tab and were hidden before:
+    // Customer Notes (= Customers → Customer Notes), Message History (= Messages → Message History),
+    // Reminder Settings (= Messages → Appointment Reminder).
+    menus: {
+      include: [['Beauty Within Portal']],
+      exclude: [['Beauty Within Portal', 'Customer Notes'], ['Beauty Within Portal', 'Message History'], ['Beauty Within Portal', 'Reminder Settings']],
+    },
   },
   receptionist: {
     title: 'Receptionist',
@@ -132,7 +138,6 @@ const ROLES = {
         ['Beauty Within Portal', 'Memberships'],
         ['Beauty Within Portal', 'Customer Memberships'],
         ['Beauty Within Portal', 'Membership Benefits'],
-        ['Beauty Within Portal', 'Customer Notes'],
       ],
     },
   },
@@ -178,7 +183,6 @@ const ROLES = {
         ['Beauty Within Portal', 'Shifts'],
         ['Beauty Within Portal', 'Customers', 'Customers List'],
         ['Beauty Within Portal', 'Customers', 'Customer Notes'],
-        ['Beauty Within Portal', 'Customer Notes'],
         ['Beauty Within Portal', 'Services', 'Service List'],
         ['Beauty Within Portal', 'Statistics', 'Staff Performance'],
       ],
