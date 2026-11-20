@@ -7,7 +7,7 @@ and the review appears in **Statistics → Staff Performance → Client Review S
 | Piece | Where |
 | --- | --- |
 | Collections, secure actions, public page, workflow node | Plugin `@salon/plugin-customer-reviews` (`packages/plugins/@salon/plugin-customer-reviews`) |
-| Workflow, appointment panel, Customer Reviews page, Staff Performance section | `yarn apply:customer-reviews` (`scripts/apply-customer-reviews.js`, definitions in `scripts/customer-reviews.js`, UI code in `scripts/ui/`) |
+| Workflow, appointment panel, Customers → Customer Reviews tab, Staff Performance section | `yarn apply:customer-reviews` (`scripts/apply-customer-reviews.js`, definitions in `scripts/customer-reviews.js`, UI code in `scripts/ui/`) |
 | Tests | `yarn test:customer-reviews` (pure server logic and UI scripts; no database needed) |
 
 ## 1. Architecture findings (Phase 1)
@@ -156,7 +156,7 @@ share** (manual fallback), **Send review invitation now** (when nothing was sent
 delivery history. Every action re-checks eligibility and the email policy and cannot create a second active
 invitation or a second review. For other roles the panel is not rendered.
 
-**Customer Reviews page** (Beauty Within Portal menu; admins, managers): technician, customer, appointment, rating,
+**Customers → Customer Reviews tab** (admins, managers): technician, customer, appointment, rating,
 comment, submission date, status; filters (technician, rating, status, date, comment search); **Flag / Remove flag**
 with a reason (required to flag). Moderation never edits or deletes the rating or comment and is recorded in
 `customer_review_moderation_events` (who, when, from/to, reason), shown in each row's expandable audit trail.
@@ -220,3 +220,66 @@ the error says the SMTP login failed). Expired or revoked links: **Send new invi
 * A link remains valid while the appointment is completed; if the appointment is re-opened (status changed), its
   links stop working, and they work again if it is completed again before they expire.
 * Expiry is fixed at 7 days, matching the email text.
+
+## 9. Tests executed (2026-11-19, local dev instance)
+
+**Automated** (`yarn test:customer-reviews`): 20/20 server-logic tests (tokens, policy, eligibility, validation, email
+rendering and escaping, score maths, rate limiting) and 18/18 UI/apply tests (panel, Customer Reviews tab, Client Review
+Scores section in jsdom; Staff Performance patch idempotency and exact removal; RunJS rule). Not run: database
+integration tests against a disposable database (none was available; the Clerk plugin's tests refuse shared databases).
+
+**Live, against the running app (API and browser):**
+
+| Area | Result |
+| --- | --- |
+| Plugin install, tables, rating CHECK | Enabled; 4 tables created on start |
+| Locked tables | create/update/destroy on review tables → 403 for admin; anonymous → 401 on every non-public API |
+| Roles (X-Role) | member → 403 on lists and staff actions, 200 on scores; manager and admin → allowed; create review → 403 for all |
+| Workflow | Status → Completed sent a real email through the Gmail channel within ~2 s; job result holds only `{status, deliveryId, invitations}`; editing the completed appointment or re-saving Completed → no new execution or email |
+| Email policy | Customer without transactional consent → delivery `skipped (transactional_opt_out)`; regenerate also skipped |
+| Manual link | Refused before completion and for a non-technician; created link works; token never in API output or database |
+| Public page | No sign-in; technician, service, date shown; 320/375 px without horizontal scroll; keyboard star selection; required-rating error; noindex/no-referrer; no external resources |
+| Submission | Stored exactly as typed (HTML shown as text); token consumed; reuse → "already in"; 5 replays → `used`; 8 concurrent submits → 1 review; invalid rating/long comment do not consume |
+| Link states | replaced → revoked; appointment reopened/cancelled → ineligible, re-completed → valid; revoke → revoked |
+| Rate limit | 429 with Retry-After after 20 submissions / 15 min / IP |
+| Logs | No token in request/system logs (header not logged) |
+| Moderation | Flag needs a reason; flagged still counted; audit events recorded with user and time, cannot be deleted; rating edit → 403 |
+| Real customer review | Chizalum's emailed link → 5★ review, visible on the Customer Reviews tab and in the drawer panel |
+| Client Review Scores | 3.7 from 3 reviews this week (Grace Kim), "No reviews yet" for others, Last Month → "No reviews yet", technician filter works; Earnings, Retention, appointment counts, revenue and skill demand unchanged |
+
+Not tested live: link expiry after 7 days (unit-tested), an actual SMTP failure and Retry (UI-tested only; breaking the
+salon's SMTP settings was not attempted), staff/receptionist roles with real accounts (member role used instead).
+
+**Pre-existing issue found (not part of T-05):** the appointment drawers' Technician JS fields call
+`appointmentAvailability:availableStaff`, which `@parlour/plugin-appointment-availability` does not define → "Not Found"
+toast and "Staff availability could not be checked" when an appointment is viewed.
+
+## 10. Files
+
+New: `packages/plugins/@salon/plugin-customer-reviews/**`, `scripts/customer-reviews.js`,
+`scripts/apply-customer-reviews.js`, `scripts/customer-reviews.test.js`, `scripts/ui/appointment-review-invitations.js`,
+`scripts/ui/customer-reviews-admin.js`, `scripts/ui/staff-review-scores.js`, `docs/customer-reviews.md`.
+Modified: `package.json` (`apply:customer-reviews`, `test:customer-reviews`); `tsconfig.paths.json` and `yarn.lock`
+(by `yarn install`). In the database (UI): the review workflow, the panel in the 5 appointment-details drawers, the
+Customer Reviews tab, and the Client Review Scores section inside the Staff Performance block
+(`yarn apply:customer-reviews --remove-statistics` removes it and restores the original code exactly).
+
+## 11. Removing the QA test data
+
+Reviews cannot be deleted through the app by design, so test reviews need SQL. Run against the dev database only:
+
+```sql
+-- QA records created during T-05 testing
+WITH qa_appointments AS (
+  SELECT id FROM appointments WHERE notes LIKE 'T-05 QA test appointment%'
+)
+DELETE FROM customer_review_moderation_events WHERE "reviewId" IN (SELECT id FROM customer_reviews WHERE "appointmentId" IN (SELECT id FROM qa_appointments));
+DELETE FROM customer_reviews             WHERE "appointmentId" IN (SELECT id FROM appointments WHERE notes LIKE 'T-05 QA test appointment%');
+DELETE FROM customer_review_invitations  WHERE "appointmentId" IN (SELECT id FROM appointments WHERE notes LIKE 'T-05 QA test appointment%');
+DELETE FROM customer_review_deliveries   WHERE "appointmentId" IN (SELECT id FROM appointments WHERE notes LIKE 'T-05 QA test appointment%');
+```
+
+Then delete the QA appointments (search "T-05 QA" on Appointments → List View) and the customer
+"QA Review-Skip (T-05 test)" in the app, so the CRM's own hooks run. To keep Chizalum's real review, add
+`AND notes NOT LIKE '%real email%'` to each appointment filter above. Chizalum's consent event is append-only by design;
+record a "withdrawn" event if it should be reversed.

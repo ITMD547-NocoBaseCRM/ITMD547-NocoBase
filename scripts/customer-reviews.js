@@ -8,8 +8,11 @@ const PLUGIN_PACKAGE = '@salon/plugin-customer-reviews';
 const REVIEW_WORKFLOW_TITLE = 'Customer reviews: invite after completed appointment';
 const REVIEW_NODE_TYPE = 'customerReviewInvitations';
 const REVIEW_NODE_TITLE = 'Send review invitations';
-const REVIEWS_PAGE_TITLE = 'Customer Reviews';
-const MENU_GROUP_TITLE = 'Beauty Within Portal';
+// Reviews live in a tab of the Customers page. Earlier versions created a standalone "Customer Reviews" menu page;
+// the apply script moves that into the tab and removes the page.
+const REVIEWS_TAB_TITLE = 'Customer Reviews';
+const CUSTOMERS_PAGE_TITLE = 'Customers';
+const LEGACY_REVIEWS_PAGE_TITLE = 'Customer Reviews';
 const PANEL_TITLE = 'Review invitations';
 const PANEL_MARKER = 'BW-REVIEWS appointment-panel';
 const ADMIN_MARKER = 'BW-REVIEWS admin-page';
@@ -94,11 +97,12 @@ function unpatchStatisticsCode(code) {
 module.exports = {
   ADMIN_MARKER,
   CALL_ANCHOR,
-  MENU_GROUP_TITLE,
+  CUSTOMERS_PAGE_TITLE,
+  LEGACY_REVIEWS_PAGE_TITLE,
   PANEL_MARKER,
   PANEL_TITLE,
   PLUGIN_PACKAGE,
-  REVIEWS_PAGE_TITLE,
+  REVIEWS_TAB_TITLE,
   REVIEW_NODE_TITLE,
   REVIEW_NODE_TYPE,
   REVIEW_WORKFLOW_TITLE,

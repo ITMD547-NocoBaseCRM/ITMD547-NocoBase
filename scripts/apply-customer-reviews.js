@@ -12,8 +12,9 @@
 //      one node "Send review invitations";
 //   3. adds the "Review invitations" panel (scripts/ui/appointment-review-invitations.js) to every Appointment
 //      details drawer, or refreshes its code;
-//   4. creates the "Customer Reviews" page in the Beauty Within Portal menu with the review list and moderation
-//      block (scripts/ui/customer-reviews-admin.js), or refreshes its code;
+//   4. adds a "Customer Reviews" tab to the Customers page with the review list and moderation block
+//      (scripts/ui/customer-reviews-admin.js), or refreshes its code; removes the standalone "Customer Reviews"
+//      menu page created by earlier versions;
 //   5. adds the Client Review Scores section to Statistics → Staff Performance (scripts/ui/staff-review-scores.js).
 //      The first time, the block's original code is saved to scripts/backups/statistics-staff-block.original.js.
 //      --remove-statistics takes the section out again.
@@ -26,11 +27,12 @@ const path = require('path');
 const { createClient, formatErrors } = require('./nocobase-api');
 const {
   ADMIN_MARKER,
-  MENU_GROUP_TITLE,
+  CUSTOMERS_PAGE_TITLE,
+  LEGACY_REVIEWS_PAGE_TITLE,
   PANEL_MARKER,
   PANEL_TITLE,
   PLUGIN_PACKAGE,
-  REVIEWS_PAGE_TITLE,
+  REVIEWS_TAB_TITLE,
   REVIEW_NODE_TYPE,
   REVIEW_WORKFLOW_TITLE,
   SECTION_BEGIN,
@@ -173,38 +175,59 @@ function findInTree(node, predicate) {
   return null;
 }
 
-async function ensureReviewsPage(client, { check }) {
+async function ensureReviewsTab(client, { check }) {
   const code = readUi('customer-reviews-admin.js');
-  const routes = await client.request(`desktopRoutes:list?paginate=false&filter=${encode({ title: { $in: [REVIEWS_PAGE_TITLE, MENU_GROUP_TITLE] } })}&fields=id,title,type,schemaUid,parentId`);
+  const routes = await client.request(`desktopRoutes:list?paginate=false&appends[]=children&filter=${encode({ title: { $in: [CUSTOMERS_PAGE_TITLE, LEGACY_REVIEWS_PAGE_TITLE] }, type: 'flowPage' })}`);
   if (!routes.ok) throw fail('desktopRoutes:list', routes);
   const rows = routes.json?.data || [];
-  const group = rows.find((r) => r.title === MENU_GROUP_TITLE && r.type === 'group');
-  const page = rows.find((r) => r.title === REVIEWS_PAGE_TITLE && r.type === 'flowPage');
-  let pageSchemaUid = page?.schemaUid;
-  let status = 'present';
-  if (!pageSchemaUid) {
-    if (check) return { status: 'missing (would create)' };
-    const created = await client.request('flowSurfaces:createPage', { method: 'POST', body: { title: REVIEWS_PAGE_TITLE, icon: 'StarOutlined', parentMenuRouteId: group ? group.id : undefined, displayTitle: true } });
-    if (!created.ok) throw fail('flowSurfaces:createPage', created);
-    const data = created.json?.data || {};
-    pageSchemaUid = data.pageSchemaUid || data.schemaUid || data.route?.schemaUid;
-    if (!pageSchemaUid) throw new Error(`createPage returned no pageSchemaUid: ${JSON.stringify(data).slice(0, 300)}`);
-    status = 'created';
+  const customers = rows.find((r) => r.title === CUSTOMERS_PAGE_TITLE);
+  if (!customers) throw new Error(`The "${CUSTOMERS_PAGE_TITLE}" page was not found.`);
+  const surface = await client.request(`flowSurfaces:get?pageSchemaUid=${customers.schemaUid}`);
+  if (!surface.ok) throw fail('flowSurfaces:get (Customers)', surface);
+  const pageModel = surface.json?.data?.tree;
+  const tabRoute = (customers.children || []).find((c) => c.title === REVIEWS_TAB_TITLE);
+  const result = { page: customers.schemaUid };
+  let gridUid;
+  let block = null;
+  if (tabRoute) {
+    const tabModel = findInTree(pageModel, (n) => n.uid === tabRoute.schemaUid);
+    gridUid = findInTree(tabModel, (n) => n.use === 'BlockGridModel')?.uid;
+    block = findInTree(tabModel, (n) => n.use === 'JSBlockModel' && codeOf(n).includes(ADMIN_MARKER));
+    result.tab = { status: 'present', tabSchemaUid: tabRoute.schemaUid };
+  } else if (check) {
+    result.tab = { status: 'missing (would add)' };
+  } else {
+    // addTab takes the page model uid (RootPageModel), not the route's schemaUid.
+    const added = await client.request('flowSurfaces:addTab', { method: 'POST', body: { target: { uid: pageModel.uid }, title: REVIEWS_TAB_TITLE, icon: 'StarOutlined' } });
+    if (!added.ok) throw fail('flowSurfaces:addTab (Customer Reviews)', added);
+    gridUid = added.json.data.gridUid;
+    result.tab = { status: 'added', tabSchemaUid: added.json.data.tabSchemaUid };
   }
-  const surface = await client.request(`flowSurfaces:get?pageSchemaUid=${pageSchemaUid}`);
-  if (!surface.ok) throw fail('flowSurfaces:get', surface);
-  const tree = surface.json?.data?.tree;
-  const block = findInTree(tree, (n) => n.use === 'JSBlockModel' && codeOf(n).includes(ADMIN_MARKER));
-  if (block && codeOf(block) === code) return { status, pageSchemaUid, url: `/admin/${pageSchemaUid}` };
-  if (check) return { status: `${status} (${block ? 'block outdated' : 'block missing'})`, pageSchemaUid };
-  if (block) {
+  if (block && codeOf(block) === code) result.block = 'up to date';
+  else if (check) result.block = block ? 'outdated (would refresh)' : 'missing (would add)';
+  else if (block) {
     await setCode(client, block, code);
-    return { status: `${status}, block refreshed`, pageSchemaUid, url: `/admin/${pageSchemaUid}` };
+    result.block = 'refreshed';
+  } else {
+    if (!gridUid) throw new Error('The Customer Reviews tab has no block grid.');
+    await addJsBlock(client, gridUid, 'Customer reviews', code);
+    result.block = 'added';
   }
-  const grid = findInTree(tree, (n) => n.use === 'BlockGridModel');
-  if (!grid) throw new Error('The Customer Reviews page has no block grid.');
-  await addJsBlock(client, grid.uid, 'Customer reviews', code);
-  return { status: `${status}, block added`, pageSchemaUid, url: `/admin/${pageSchemaUid}` };
+  // Earlier versions used a standalone menu page; remove it once the tab exists (only if it is ours).
+  const legacy = rows.find((r) => r.title === LEGACY_REVIEWS_PAGE_TITLE);
+  if (legacy) {
+    const legacySurface = await client.request(`flowSurfaces:get?pageSchemaUid=${legacy.schemaUid}`);
+    const legacyTree = legacySurface.json?.data?.tree;
+    const ours = JSON.stringify(legacyTree || {}).includes(ADMIN_MARKER);
+    if (!ours) result.legacyPage = 'a "Customer Reviews" page exists that this script did not create; left alone';
+    else if (check) result.legacyPage = 'present (would remove)';
+    else {
+      const destroyed = await client.request('flowSurfaces:destroyPage', { method: 'POST', body: { uid: legacyTree.uid } });
+      if (!destroyed.ok) throw fail('flowSurfaces:destroyPage (legacy Customer Reviews page)', destroyed);
+      result.legacyPage = 'removed';
+    }
+  }
+  return result;
 }
 
 // 5 -----------------------------------------------------------------------------------------------------------
@@ -234,7 +257,7 @@ async function main() {
   summary.workflow = await ensureWorkflow(client, { check, keepDisabled });
   const all = await listAllModels(client);
   summary.appointmentPanels = await ensureAppointmentPanels(client, all, { check });
-  summary.reviewsPage = await ensureReviewsPage(client, { check });
+  summary.reviewsTab = await ensureReviewsTab(client, { check });
   summary.staffPerformance = await ensureStatisticsSection(client, all, { check, remove });
   console.log(JSON.stringify(summary, null, 2));
 }
