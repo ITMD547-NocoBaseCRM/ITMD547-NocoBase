@@ -1,0 +1,1134 @@
+{
+ "ranAt": "2026-11-20T19:56:24.717Z",
+ "note": "manager/member probes ran with an account holding those roles (rbac_manager/rbac_member no longer exist)",
+ "results": [
+  {
+   "role": "member",
+   "name": "cannot list customers",
+   "pass": true,
+   "detail": "customers:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list appointments",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list payments",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list staff",
+   "pass": true,
+   "detail": "staff:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list employeeShifts",
+   "pass": true,
+   "detail": "employeeShifts:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list customerNotes",
+   "pass": true,
+   "detail": "customerNotes:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list services",
+   "pass": true,
+   "detail": "services:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list memberships",
+   "pass": true,
+   "detail": "memberships:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list communication_consent_events",
+   "pass": true,
+   "detail": "communication_consent_events:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list communication_suppressions",
+   "pass": true,
+   "detail": "communication_suppressions:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list customer_reviews",
+   "pass": true,
+   "detail": "customer_reviews:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list customer_review_invitations",
+   "pass": true,
+   "detail": "customer_review_invitations:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list staffAvailabilityLeaves",
+   "pass": true,
+   "detail": "staffAvailabilityLeaves:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list staffAvailabilitySchedules",
+   "pass": true,
+   "detail": "staffAvailabilitySchedules:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list appointmentAvailabilitySettings",
+   "pass": true,
+   "detail": "appointmentAvailabilitySettings:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list customerMessages",
+   "pass": true,
+   "detail": "customerMessages:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list workflows",
+   "pass": true,
+   "detail": "workflows:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list roles",
+   "pass": true,
+   "detail": "roles:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list users",
+   "pass": true,
+   "detail": "users:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list apiKeys",
+   "pass": true,
+   "detail": "apiKeys:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list authenticators",
+   "pass": true,
+   "detail": "authenticators:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list environmentVariables",
+   "pass": true,
+   "detail": "environmentVariables:list -> 200"
+  },
+  {
+   "role": "member",
+   "name": "cannot list clerkStaffLinks",
+   "pass": true,
+   "detail": "clerkStaffLinks:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot create a customer",
+   "pass": true,
+   "detail": "customers:create -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot read review scores",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list reviews",
+   "pass": true,
+   "detail": "customerReviewAdmin:listReviews -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot query staff availability",
+   "pass": true,
+   "detail": "appointmentAvailability:availableStaff -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot list plugins",
+   "pass": true,
+   "detail": "pm:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot enable plugins",
+   "pass": true,
+   "detail": "pm:enable -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot change system settings",
+   "pass": true,
+   "detail": "systemSettings:update -> 403"
+  },
+  {
+   "role": "member",
+   "name": "session works (auth:check)",
+   "pass": true,
+   "detail": "auth:check -> 200"
+  },
+  {
+   "role": "member",
+   "name": "menu shows only Access Pending",
+   "pass": true,
+   "detail": "desktopRoutes:listAccessible -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "menu has no Dashboard",
+   "pass": true,
+   "detail": "desktopRoutes:listAccessible -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "lists appointments",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "sees only own appointments",
+   "pass": true,
+   "detail": "98 rows"
+  },
+  {
+   "role": "staff",
+   "name": "cannot open another technician's appointment by id",
+   "pass": true,
+   "detail": "appointments:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "cannot filter into other technicians' appointments",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "cannot change another technician's appointment",
+   "pass": true,
+   "detail": "appointments:update -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "cannot delete appointments",
+   "pass": true,
+   "detail": "appointments:destroy -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot export appointments",
+   "pass": true,
+   "detail": "appointments:export -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "can re-save status of own appointment",
+   "pass": true,
+   "detail": "appointments:update -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "dashboard-style related paths work (customer name, service name)",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related customer record is trimmed (no email/address/consent)",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "lists customers",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "sees only customers of own appointments",
+   "pass": true,
+   "detail": "33 rows"
+  },
+  {
+   "role": "staff",
+   "name": "customer email/address/DOB/spend/consent hidden",
+   "pass": true,
+   "detail": "createdAt,updatedAt,firstVisitAt,lastVisitAt,firstName,id,lastName,phone,skinProfile,skinProfileOther,skinSensitivities,skinSensitivitiesOther,status,visitCount,createdById,appointments"
+  },
+  {
+   "role": "staff",
+   "name": "cannot open an unrelated customer",
+   "pass": true,
+   "detail": "customers:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "cannot reach unrelated customer data via association",
+   "pass": true,
+   "detail": "customers/398097568628745/appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "lists shifts",
+   "pass": true,
+   "detail": "employeeShifts:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "sees only own shifts",
+   "pass": true,
+   "detail": "95 rows"
+  },
+  {
+   "role": "staff",
+   "name": "lists staff",
+   "pass": true,
+   "detail": "staff:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "sees only own employee record",
+   "pass": true,
+   "detail": "1 rows"
+  },
+  {
+   "role": "staff",
+   "name": "lists customer notes",
+   "pass": true,
+   "detail": "customerNotes:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "notes are own or unassigned on own customers",
+   "pass": true,
+   "detail": "2 rows"
+  },
+  {
+   "role": "staff",
+   "name": "reads review scores",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "scores show only own (staffId param ignored)",
+   "pass": true,
+   "detail": "{\"data\":{\"minRankable\":5,\"staff\":[{\"staffId\":\"390349123682304\",\"count\":1,\"sum\":5,\"average\":5,\"distribution\":[0,0,0,0,1],\"flagged\":0,\"lowSample\":true}]}}"
+  },
+  {
+   "role": "staff",
+   "name": "workspace: loads",
+   "pass": true,
+   "detail": "staffWorkspace:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "workspace: no revenue, sales, earnings or payment data",
+   "pass": true,
+   "detail": "periodDays,appointments,completed,cancelled,noShow,completionRate,shifts,shiftsCompleted,shiftsOnLeave,attendance"
+  },
+  {
+   "role": "staff",
+   "name": "workspace: completed counts and attendance present",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "role": "staff",
+   "name": "workspace: own review score and count available",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "page flag: financial widgets off",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "payments: list refused",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: get refused",
+   "pass": true,
+   "detail": "payments:get -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: aggregate refused",
+   "pass": true,
+   "detail": "payments:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: export refused",
+   "pass": true,
+   "detail": "payments:export -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: create refused",
+   "pass": true,
+   "detail": "payments:create -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: no prices or payments in details",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: explicit price fields dropped",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: association to payments refused",
+   "pass": true,
+   "detail": "appointments/398098147442726/payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: filter by payment amount refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: filter by booked price refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: sort by booked price refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: export refused",
+   "pass": true,
+   "detail": "appointments:export -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "services: list prices visible (allowed)",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "services: related employees show no email/phone",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: related employee shows no email/phone",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "service lines: no booked prices",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "service lines: filter on booked price refused",
+   "pass": true,
+   "detail": "appointmentServices:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: no spend totals or payments",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "customers: spend fields dropped",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "customers: sort by spend refused",
+   "pass": true,
+   "detail": "customers:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: filter by spend refused",
+   "pass": true,
+   "detail": "customers:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: association to payments refused",
+   "pass": true,
+   "detail": "customers/398097568628745/payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customer activity: no spend columns",
+   "pass": true,
+   "detail": "customerActivity:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: appointment → customer → activity spend dropped",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: notes → customer → payments dropped",
+   "pass": true,
+   "detail": "customerNotes:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: filter through customer spend refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: appointment counts allowed",
+   "pass": true,
+   "detail": "appointments:query -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: skill demand counts allowed",
+   "pass": true,
+   "detail": "appointmentServices:query -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: revenue sum refused",
+   "pass": true,
+   "detail": "appointmentServices:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: revenue per technician refused",
+   "pass": true,
+   "detail": "appointments:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: grouping by booked price refused",
+   "pass": true,
+   "detail": "appointmentServices:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: customer spend sum refused",
+   "pass": true,
+   "detail": "customers:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "writes: cannot change service prices",
+   "pass": true,
+   "detail": "services:update -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list memberships",
+   "pass": true,
+   "detail": "memberships:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list customerMemberships",
+   "pass": true,
+   "detail": "customerMemberships:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list communication_consent_events",
+   "pass": true,
+   "detail": "communication_consent_events:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list communication_suppressions",
+   "pass": true,
+   "detail": "communication_suppressions:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list customerMessages",
+   "pass": true,
+   "detail": "customerMessages:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list customer_reviews",
+   "pass": true,
+   "detail": "customer_reviews:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list workflows",
+   "pass": true,
+   "detail": "workflows:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list roles",
+   "pass": true,
+   "detail": "roles:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot list reviews",
+   "pass": true,
+   "detail": "customerReviewAdmin:listReviews -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot change service prices",
+   "pass": true,
+   "detail": "services:update -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot record consent",
+   "pass": true,
+   "detail": "communication_consent_events:create -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "lists customers",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "customer spend hidden",
+   "pass": true,
+   "detail": "38 fields"
+  },
+  {
+   "role": "receptionist",
+   "name": "lists appointments",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "related payments are removed from appointments",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "related customer has no spend total",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot delete customers",
+   "pass": true,
+   "detail": "customers:destroy -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot delete appointments",
+   "pass": true,
+   "detail": "appointments:destroy -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "views services",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot change service prices",
+   "pass": true,
+   "detail": "services:update -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "views staff list",
+   "pass": true,
+   "detail": "staff:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "staff email/phone hidden",
+   "pass": true,
+   "detail": "createdAt,updatedAt,active,firstName,id,lastName,role,specialty,createdById"
+  },
+  {
+   "role": "receptionist",
+   "name": "lists shifts",
+   "pass": true,
+   "detail": "employeeShifts:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "lists customer notes",
+   "pass": true,
+   "detail": "customerNotes:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "lists customer memberships",
+   "pass": true,
+   "detail": "customerMemberships:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "views review status",
+   "pass": true,
+   "detail": "customerReviewAdmin:listReviews -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "opens an appointment review summary",
+   "pass": true,
+   "detail": "customerReviewAdmin:appointmentSummary -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot moderate reviews",
+   "pass": true,
+   "detail": "customerReviewAdmin:moderate -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot revoke invitations",
+   "pass": true,
+   "detail": "customerReviewAdmin:revoke -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot read staff review scores",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot read review tables directly",
+   "pass": true,
+   "detail": "customer_reviews:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "views consent history",
+   "pass": true,
+   "detail": "communication_consent_events:list -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot edit consent history",
+   "pass": true,
+   "detail": "communication_consent_events:update -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot create suppressions",
+   "pass": true,
+   "detail": "communication_suppressions:create -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "can check staff availability",
+   "pass": true,
+   "detail": "appointmentAvailability:availableStaff -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list payments",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list customerMessages",
+   "pass": true,
+   "detail": "customerMessages:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list appointmentReminderSettings",
+   "pass": true,
+   "detail": "appointmentReminderSettings:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list workflows",
+   "pass": true,
+   "detail": "workflows:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list roles",
+   "pass": true,
+   "detail": "roles:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list apiKeys",
+   "pass": true,
+   "detail": "apiKeys:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot list clerkStaffLinks",
+   "pass": true,
+   "detail": "clerkStaffLinks:list -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "lists customers",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists appointments",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists payments",
+   "pass": true,
+   "detail": "payments:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists services",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists memberships",
+   "pass": true,
+   "detail": "memberships:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists customerMemberships",
+   "pass": true,
+   "detail": "customerMemberships:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists staff",
+   "pass": true,
+   "detail": "staff:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists employeeShifts",
+   "pass": true,
+   "detail": "employeeShifts:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists customerNotes",
+   "pass": true,
+   "detail": "customerNotes:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists communication_consent_events",
+   "pass": true,
+   "detail": "communication_consent_events:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists communication_suppressions",
+   "pass": true,
+   "detail": "communication_suppressions:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists customerMessages",
+   "pass": true,
+   "detail": "customerMessages:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists users",
+   "pass": true,
+   "detail": "users:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "reads all review scores",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "lists reviews",
+   "pass": true,
+   "detail": "customerReviewAdmin:listReviews -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "user passwords not readable",
+   "pass": true,
+   "detail": "users:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "cannot list workflows",
+   "pass": true,
+   "detail": "workflows:list -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot edit workflow nodes",
+   "pass": true,
+   "detail": "flow_nodes:update -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot list plugins",
+   "pass": true,
+   "detail": "pm:list -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot enable plugins",
+   "pass": true,
+   "detail": "pm:enable -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot list API keys",
+   "pass": true,
+   "detail": "apiKeys:list -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot read variables & secrets",
+   "pass": true,
+   "detail": "environmentVariables:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "cannot configure authentication",
+   "pass": true,
+   "detail": "authenticators:update -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot change roles",
+   "pass": true,
+   "detail": "roles:update -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot change role permissions",
+   "pass": true,
+   "detail": "roles/member/dataSourceResources:create -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot assign roles to users",
+   "pass": true,
+   "detail": "users/undefined/roles:add -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot create user accounts",
+   "pass": true,
+   "detail": "users:create -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot change system settings",
+   "pass": true,
+   "detail": "systemSettings:update -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot create collections",
+   "pass": true,
+   "detail": "collections:create -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "opens Staff Access (lists Clerk staff links)",
+   "pass": true,
+   "detail": "clerkStaffLinks:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "cannot link an Admin user",
+   "pass": true,
+   "detail": "clerkStaffLinks:create -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot give the Manager role",
+   "pass": true,
+   "detail": "employeeOnboarding:provision -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "settings show only Appointment availability, Staff Access, Mobile",
+   "pass": true,
+   "detail": "roles:check -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists workflows",
+   "pass": true,
+   "detail": "workflows:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists roles",
+   "pass": true,
+   "detail": "roles:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists users",
+   "pass": true,
+   "detail": "users:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists apiKeys",
+   "pass": true,
+   "detail": "apiKeys:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists customers",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists payments",
+   "pass": true,
+   "detail": "payments:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "lists plugins",
+   "pass": true,
+   "detail": "pm:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "reads review scores",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: revenue aggregate still works",
+   "pass": true,
+   "detail": "payments:query -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: page flag on",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: revenue aggregate still works",
+   "pass": true,
+   "detail": "payments:query -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: page flag on",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "financial: unchanged – still no payments",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "financial: unchanged – booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "public",
+   "name": "cannot list customers",
+   "pass": true,
+   "detail": "customers:list -> 401"
+  },
+  {
+   "role": "public",
+   "name": "cannot list reviews",
+   "pass": true,
+   "detail": "customer_reviews:list -> 401"
+  },
+  {
+   "role": "public",
+   "name": "review link endpoint reachable without login (bad token refused by the handler)",
+   "pass": true,
+   "detail": "customerReviewLinks:inspect -> 200"
+  }
+ ]
+}
