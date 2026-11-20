@@ -64,6 +64,8 @@
     "apply:customer-messaging": "node scripts/apply-customer-messaging.js",
     "apply:customer-birthday": "node scripts/apply-customer-birthday.js",
     "apply:customer-reviews": "node scripts/apply-customer-reviews.js",
+    "apply:appointment-date": "node scripts/apply-appointment-date.js",
+    "test:appointment-date": "node --test scripts/appointment-date.test.js",
     "test:customer-reviews": "node --test --test-concurrency=1 scripts/customer-reviews.test.js packages/plugins/@salon/plugin-customer-reviews/src/server/__tests__/core.test.ts"
   },
   "resolutions": {
