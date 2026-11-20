@@ -61,7 +61,7 @@ test('receptionist cannot delete records, change prices or see payments', () => 
 test('every staff read of personal data is scoped to the linked staff record', () => {
   const s = ROLES.staff.collections;
   for (const coll of ['appointments', 'appointments_time_view', 'appointmentServices', 'customers', 'customerActivity', 'customerNotes',
-    'employeeShifts', 'staff', 'services', 'staffServices', 'staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves', 'payments']) {
+    'employeeShifts', 'staff', 'services', 'staffServices', 'staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves']) {
     const view = s[coll].find((a) => a.name === 'view');
     assert.ok(view && view.scope, `staff ${coll} view must be scoped`);
     const scope = SCOPES[view.scope];
@@ -70,9 +70,7 @@ test('every staff read of personal data is scoped to the linked staff record', (
     assert.match(JSON.stringify(scope.scope), /\$user\.staff\.id/);
     assert.match(JSON.stringify(scope.scope), /\$exists/, `${view.scope} must refuse users without a staff record`);
   }
-  const pay = s.payments[0].fields;
-  for (const f of ['transactionReference', 'paymentMethod', 'notes', 'customer', 'customerId']) assert.ok(!pay.includes(f), `staff payment field ${f}`);
-  for (const coll of ['memberships', 'customerMemberships', 'communication_consent_events', 'communication_suppressions', 'customerMessages']) {
+  for (const coll of ['payments', 'memberships', 'customerMemberships', 'communication_consent_events', 'communication_suppressions', 'customerMessages']) {
     assert.equal(s[coll], undefined, `staff must not access ${coll}`);
   }
   const fields = s.customers[0].fields;
@@ -109,4 +107,35 @@ test('all referenced scopes exist and match their collection', () => {
       for (const a of actions) if (a.scope) assert.equal(SCOPES[a.scope] && SCOPES[a.scope].resourceName, coll, `${a.scope} on ${coll}`);
     }
   }
+});
+
+test('Staff: no financial data (payments table, prices, amounts, spend totals)', () => {
+  const { FINANCIAL } = require('./rbac-spec');
+  const staff = ROLES.staff;
+  assert.equal(staff.noFinancial, true);
+  for (const c of FINANCIAL.collections) assert.ok(!staff.collections[c], `staff must not list ${c}`);
+  for (const [coll, actions] of Object.entries(staff.collections)) {
+    for (const act of actions) {
+      for (const f of act.fields || []) {
+        const [head] = String(f).split('.');
+        assert.ok(!(FINANCIAL.fields[coll] || []).includes(head), `staff ${coll}.${act.name} lists ${f}`);
+      }
+    }
+  }
+  // Receptionist keeps its existing (no payments, no spend totals) configuration.
+  assert.ok(!ROLES.receptionist.collections.payments || ROLES.receptionist.collections.payments.length === 0);
+  assert.ok(!ROLES.receptionist.noFinancial);
+  assert.ok(!ROLES.manager.noFinancial);
+});
+
+test('financial list is identical in the RBAC spec and the server guard', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const extract = (file) => {
+    const text = fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8');
+    const block = text.split('BEGIN FINANCIAL-CONFIG')[1].split('// END FINANCIAL-CONFIG')[0];
+    const obj = block.slice(block.indexOf('{'), block.lastIndexOf('}') + 1);
+    return new Function(`return (${obj});`)();
+  };
+  assert.deepEqual(extract('packages/plugins/@parlour/plugin-crm/src/server/financial-guard.ts'), extract('scripts/rbac/rbac-spec.js'));
 });

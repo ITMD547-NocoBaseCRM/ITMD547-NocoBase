@@ -39,6 +39,62 @@ async function verifyRbac(as, ctx) {
     return r.ok && titles.length === 1 && titles[0] === 'Access Pending';
   });
 
+  // ---------- Staff: no financial data (backend, every channel) ----------
+  // A response "leaks" when it contains any money key anywhere (amount, price, priceAtBooking, totalSpent,
+  // spentLast12m, monthlyPrice, revenue, payments …).
+  const MONEY = /"(amount|price|priceAtBooking|totalSpent|spentLast12m|monthlyPrice|revenue|earnings|sales|payments|discountValue)"\s*:/;
+  const noMoney = (r) => !MONEY.test(JSON.stringify((r.json && r.json.data) ?? r.json ?? {}));
+  const okNoMoney = (r) => r.ok && noMoney(r);
+  const deniedOrNoMoney = (r) => denied(r) || okNoMoney(r);
+  async function staffFinancialChecks() {
+    const S = 'staff';
+    // Workspace widgets
+    const ws = await probe(S, 'workspace: loads', 'staffWorkspace:get', 'allow');
+    rec(S, 'workspace: no revenue, sales, earnings or payment data', noMoney(ws), Object.keys((ws.json && ws.json.data && ws.json.data.metrics) || {}).join(','));
+    rec(S, 'workspace: completed counts and attendance present', !!(ws.json && ws.json.data && ws.json.data.metrics && 'completed' in ws.json.data.metrics && ws.json.data.metrics.attendance), '');
+    await probe(S, 'workspace: own review score and count available', 'customerReviewAdmin:scores', (r) => r.ok && noMoney(r), { method: 'POST', body: RANGE });
+    await probe(S, 'page flag: financial widgets off', 'crmAccess:get', (r) => r.ok && r.json.data.financial === false);
+    // Direct API requests on the payments table
+    await probe(S, 'payments: list refused', 'payments:list?pageSize=1', 'deny');
+    await probe(S, 'payments: get refused', 'payments:get?filterByTk=1', 'deny');
+    await probe(S, 'payments: aggregate refused', 'payments:query', 'deny', { method: 'POST', body: { measures: [{ field: ['amount'], aggregation: 'sum', alias: 'amount' }] } });
+    await probe(S, 'payments: export refused', 'payments:export', 'deny', { method: 'POST', body: {} });
+    await probe(S, 'payments: create refused', 'payments:create', 'deny', { method: 'POST', body: { amount: 1 } });
+    // Appointment details
+    await probe(S, 'appointments: no prices or payments in details', 'appointments:list?pageSize=20&appends[]=appointmentServices&appends[]=appointmentServices.service&appends[]=payments&appends[]=customer', okNoMoney);
+    await probe(S, 'appointments: explicit price fields dropped', 'appointments:list?pageSize=20&fields[]=id&fields[]=appointmentServices.priceAtBooking&fields[]=appointmentServices.service.price&fields[]=payments.amount', okNoMoney);
+    await probe(S, 'appointments: association to payments refused', `appointments/${ctx.ownAppointmentId || otherAppointmentId}/payments:list`, 'deny');
+    await probe(S, 'appointments: filter by payment amount refused', `appointments:list?filter=${q({ payments: { amount: { $gt: 0 } } })}`, 'deny');
+    await probe(S, 'appointments: filter by booked price refused', `appointments:list?filter=${q({ 'appointmentServices.priceAtBooking': { $gt: 0 } })}`, 'deny');
+    await probe(S, 'appointments: sort by booked price refused', 'appointments:list?sort=-appointmentServices.priceAtBooking', 'deny');
+    await probe(S, 'appointments: export refused', 'appointments:export', 'deny', { method: 'POST', body: { columns: [{ dataIndex: ['appointmentServices', 'priceAtBooking'] }] } });
+    // Service views
+    await probe(S, 'services: list has no prices', 'services:list?pageSize=50', okNoMoney);
+    await probe(S, 'services: price field dropped', 'services:list?pageSize=50&fields[]=id&fields[]=name&fields[]=price', okNoMoney);
+    await probe(S, 'service lines: no booked prices', 'appointmentServices:list?pageSize=50&appends[]=service', okNoMoney);
+    await probe(S, 'service lines: filter on booked price refused', `appointmentServices:list?filter=${q({ priceAtBooking: { $gte: 0 } })}`, 'deny');
+    // Customer records
+    await probe(S, 'customers: no spend totals or payments', 'customers:list?pageSize=50&appends[]=activity&appends[]=payments&appends[]=appointments', okNoMoney);
+    await probe(S, 'customers: spend fields dropped', 'customers:list?pageSize=50&fields[]=id&fields[]=totalSpent&fields[]=activity.spentLast12m', okNoMoney);
+    await probe(S, 'customers: sort by spend refused', 'customers:list?sort=-totalSpent', 'deny');
+    await probe(S, 'customers: filter by spend refused', `customers:list?filter=${q({ activity: { spentLast12m: { $gt: 0 } } })}`, 'deny');
+    await probe(S, 'customers: association to payments refused', `customers/${otherCustomerId}/payments:list`, 'deny');
+    await probe(S, 'customer activity: no spend columns', 'customerActivity:list?pageSize=50', deniedOrNoMoney);
+    // Related collection queries (deep paths)
+    await probe(S, 'related: appointment → customer → activity spend dropped', 'appointments:list?pageSize=10&appends[]=customer.activity', okNoMoney);
+    await probe(S, 'related: notes → customer → payments dropped', 'customerNotes:list?pageSize=10&appends[]=customer&appends[]=customer.payments', okNoMoney);
+    await probe(S, 'related: filter through customer spend refused', `appointments:list?filter=${q({ customer: { totalSpent: { $gt: 0 } } })}`, 'deny');
+    // Statistics / Staff Performance (aggregate queries)
+    await probe(S, 'statistics: appointment counts allowed', 'appointments:query', (r) => r.ok && noMoney(r), { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['status'], alias: 'status' }] } });
+    await probe(S, 'statistics: skill demand counts allowed', 'appointmentServices:query', (r) => r.ok, { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['serviceId'], alias: 'serviceId' }] } });
+    await probe(S, 'statistics: revenue sum refused', 'appointmentServices:query', 'deny', { method: 'POST', body: { measures: [{ field: ['priceAtBooking'], aggregation: 'sum', alias: 'revenue' }] } });
+    await probe(S, 'statistics: revenue per technician refused', 'appointments:query', 'deny', { method: 'POST', body: { measures: [{ field: ['payments', 'amount'], aggregation: 'sum', alias: 'revenue' }], dimensions: [{ field: ['staffId'], alias: 'staffId' }] } });
+    await probe(S, 'statistics: grouping by price refused', 'services:query', 'deny', { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['price'], alias: 'price' }] } });
+    await probe(S, 'statistics: customer spend sum refused', 'customers:query', 'deny', { method: 'POST', body: { measures: [{ field: ['totalSpent'], aggregation: 'sum', alias: 'spend' }] } });
+    // Writes never set money
+    await probe(S, 'writes: cannot change service prices', 'services:update?filterByTk=1', 'deny', { method: 'POST', body: { price: 1 } });
+  }
+
   // ---------- Staff (staff_test, linked to Grace Kim) ----------
   const sAppts = await probe('staff', 'lists appointments', 'appointments:list?pageSize=500', 'allow');
   rec('staff', 'sees only own appointments', rows(sAppts).length > 0 && rows(sAppts).every((a) => String(a.staffId) === String(graceStaffId)), `${rows(sAppts).length} rows`);
@@ -49,11 +105,10 @@ async function verifyRbac(as, ctx) {
   await probe('staff', 'cannot export appointments', 'appointments:export', 'deny', { method: 'POST', body: {} });
   const own = rows(sAppts)[0];
   if (own) await probe('staff', 'can re-save status of own appointment', `appointments:update?filterByTk=${own.id}`, 'allow', { method: 'POST', body: { status: own.status } });
-  await probe('staff', 'dashboard-style related paths work (customer name, booked price)', 'appointments:list?pageSize=3&fields[]=id&fields[]=customer.firstName&fields[]=appointmentServices.priceAtBooking',
+  await probe('staff', 'dashboard-style related paths work (customer name, service name)', 'appointments:list?pageSize=3&fields[]=id&fields[]=customer.firstName&fields[]=appointmentServices.service.name',
     (r) => r.ok && rows(r).length > 0 && rows(r).every((a) => a.customer && 'firstName' in a.customer));
   await probe('staff', 'related customer record is trimmed (no email/address/consent)', 'appointments:list?pageSize=5&appends[]=customer&fields[]=id&fields[]=customer.email',
     (r) => r.ok && rows(r).every((a) => !a.customer || (!('email' in a.customer) && !('address' in a.customer) && !('emailMarketingOptIn' in a.customer))));
-  await probe('staff', 'related payments are trimmed', 'appointments:list?pageSize=5&appends[]=payments', (r) => r.ok && rows(r).every((a) => (a.payments || []).every((p) => !('transactionReference' in p) && !('paymentMethod' in p))));
   const sCust = await probe('staff', 'lists customers', 'customers:list?pageSize=500&appends[]=appointments', 'allow');
   rec('staff', 'sees only customers of own appointments', rows(sCust).every((c) => (c.appointments || []).some((a) => String(a.staffId) === String(graceStaffId))), `${rows(sCust).length} rows`);
   rec('staff', 'customer email/address/DOB/spend/consent hidden', rows(sCust).every((c) => !('email' in c) && !('address' in c) && !('dateOfBirth' in c) && !('totalSpent' in c) && !('emailMarketingOptIn' in c)), Object.keys(rows(sCust)[0] || {}).join(','));
@@ -67,9 +122,7 @@ async function verifyRbac(as, ctx) {
   rec('staff', 'notes are own or unassigned on own customers', rows(sNotes).every((n) => n.staffId == null || String(n.staffId) === String(graceStaffId)), `${rows(sNotes).length} rows`);
   const sScores = await probe('staff', 'reads review scores', 'customerReviewAdmin:scores', 'allow', { method: 'POST', body: { ...RANGE, staffId: String(otherStaffId) } });
   rec('staff', 'scores show only own (staffId param ignored)', !JSON.stringify(sScores.json || {}).includes(String(otherStaffId)), JSON.stringify(sScores.json || {}).slice(0, 160));
-  const sPay = await probe('staff', 'reads payments for own performance', 'payments:list?pageSize=500&appends[]=appointment', 'allow');
-  rec('staff', 'payments only on own appointments, no method/reference', rows(sPay).every((p) => p.appointment && String(p.appointment.staffId) === String(graceStaffId) && !('transactionReference' in p) && !('paymentMethod' in p) && !('customerId' in p)), `${rows(sPay).length} rows`);
-  await probe('staff', 'cannot export payments', 'payments:export', 'deny', { method: 'POST', body: {} });
+  await staffFinancialChecks();
   for (const res of ['memberships', 'customerMemberships', 'communication_consent_events', 'communication_suppressions', 'customerMessages', 'customer_reviews', 'workflows', 'roles']) {
     await probe('staff', `cannot list ${res}`, `${res}:list?pageSize=1`, 'deny');
   }
@@ -145,6 +198,13 @@ async function verifyRbac(as, ctx) {
   for (const res of ['workflows', 'roles', 'users', 'apiKeys', 'customers', 'payments']) await probe('admin', `lists ${res}`, `${res}:list?pageSize=1`, 'allow');
   await probe('admin', 'lists plugins', 'pm:list', 'allow');
   await probe('admin', 'reads review scores', 'customerReviewAdmin:scores', 'allow', { method: 'POST', body: RANGE });
+  for (const role of ['admin', 'manager']) {
+    await probe(role, 'financial: revenue aggregate still works', 'payments:query', (r) => r.ok && Array.isArray(r.json.data), { method: 'POST', body: { measures: [{ field: ['amount'], aggregation: 'sum', alias: 'amount' }] } });
+    await probe(role, 'financial: booked prices still visible', 'appointmentServices:list?pageSize=5', (r) => r.ok && rows(r).some((x) => 'priceAtBooking' in x));
+    await probe(role, 'financial: page flag on', 'crmAccess:get', (r) => r.ok && r.json.data.financial === true);
+  }
+  await probe('receptionist', 'financial: unchanged – still no payments', 'payments:list?pageSize=1', 'deny');
+  await probe('receptionist', 'financial: unchanged – booked prices still visible', 'appointmentServices:list?pageSize=5', (r) => r.ok && rows(r).some((x) => 'priceAtBooking' in x));
 
   // ---------- Public ----------
   await probe('public', 'cannot list customers', 'customers:list?pageSize=1', 'deny');

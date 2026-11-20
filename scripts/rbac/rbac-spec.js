@@ -59,6 +59,24 @@ const ACTIVITY_NO_SPEND = ['id', 'customerId', 'totalVisits', 'firstVisitAt', 'l
 const STAFF_PUBLIC = ['id', 'firstName', 'lastName', 'role', 'specialty', 'active', 'services'];
 const USER_PUBLIC = ['id', 'nickname', 'username'];
 
+// Financial data (revenue, payments, prices, spend totals). Roles marked `noFinancial` never get these fields or the
+// payments table, at any action or through any association path; the CRM plugin's financial guard enforces the same
+// list on every request (packages/plugins/@parlour/plugin-crm/src/server/financial-guard.ts – keep identical).
+// BEGIN FINANCIAL-CONFIG
+const FINANCIAL = {
+  collections: ['payments'],
+  fields: {
+    appointments: ['payments'],
+    appointmentServices: ['priceAtBooking'],
+    services: ['price'],
+    customers: ['totalSpent', 'payments'],
+    customerActivity: ['totalSpent', 'spentLast12m'],
+    customerMemberships: ['payments'],
+    memberships: ['monthlyPrice'],
+  },
+};
+// END FINANCIAL-CONFIG
+
 const a = (name, extra = {}) => ({ name, fields: [], ...extra });
 const many = (names, extra) => names.map((n) => a(n, extra));
 const ownViews = { customerSavedViews: [a('create'), a('view', { scope: 'RBAC: own saved views' }), a('update', { scope: 'RBAC: own saved views' }), a('destroy', { scope: 'RBAC: own saved views' })] };
@@ -172,6 +190,9 @@ const ROLES = {
   },
   staff: {
     title: 'Staff',
+    // No revenue or financial information anywhere: no payments table; prices, amounts and spend totals are left out
+    // of every field list below (FINANCIAL). Staff Performance and My Workspace show nonfinancial metrics only.
+    noFinancial: true,
     strategy: [],
     snippets: ['!pm', '!ui.*', '!app'],
     allowConfigure: false,
@@ -184,8 +205,6 @@ const ROLES = {
       ],
       appointments_time_view: [a('view', { scope: 'RBAC staff: own appointment times' })],
       appointmentServices: [a('view', { scope: 'RBAC staff: services on own appointments' })],
-      // Own performance only (Statistics → Staff Performance): amounts of payments on their own appointments.
-      payments: [a('view', { scope: 'Assigned to me (staff, via appointment)', fields: ['id', 'appointmentId', 'amount', 'paymentDate', 'paymentType', 'status', 'appointment', 'createdAt'] })],
       customers: [a('view', { scope: 'RBAC staff: customers of own appointments', fields: CUSTOMER_STAFF_VIEW })],
       customerActivity: [a('view', { scope: 'RBAC staff: activity of own customers', fields: ACTIVITY_NO_SPEND })],
       customerNotes: [
@@ -248,4 +267,4 @@ const EXTRA_PATHS = {
   appointments: ['appointmentServices.service.name', 'appointmentServices.service.price'],
 };
 
-module.exports = { ROLES, SCOPES, ACCESS_PENDING, PLUGIN_FIELDS, EXTRA_PATHS };
+module.exports = { ROLES, SCOPES, ACCESS_PENDING, PLUGIN_FIELDS, EXTRA_PATHS, FINANCIAL };

@@ -98,6 +98,30 @@ async function applyRbac(request, { spec, check = false, log = () => {} } = {}) 
     return [...names, ...paths, ...((spec.EXTRA_PATHS || {})[collection] || [])];
   };
   const fieldsFor = (collection, action) => (action.name === 'destroy' ? [] : (action.fields && action.fields.length ? action.fields : allFields(collection)));
+  // Roles marked noFinancial: drop every field or path that names financial data (spec.FINANCIAL), following
+  // association paths (appointmentServices.service.price, customer.totalSpent, payments.amount …).
+  const FIN = spec.FINANCIAL || { collections: [], fields: {} };
+  const targetOf = (collection, name) => {
+    const c = meta.find((m) => m.name === collection);
+    const f = c && (c.fields || []).find((x) => x.name === name);
+    return f && f.target;
+  };
+  const isFinancialPath = (collection, path) => {
+    let name = collection;
+    if (FIN.collections.includes(name)) return true;
+    for (const seg of String(path).split('.')) {
+      if ((FIN.fields[name] || []).includes(seg)) return true;
+      const t = targetOf(name, seg);
+      if (!t) return false;
+      if (FIN.collections.includes(t)) return true;
+      name = t;
+    }
+    return false;
+  };
+  const roleFieldsFor = (def, collection, action) => {
+    const list = fieldsFor(collection, action);
+    return def.noFinancial ? list.filter((p) => !isFinancialPath(collection, p)) : list;
+  };
 
   // 3. Roles.
   for (const [roleName, def] of Object.entries(ROLES)) {
@@ -121,7 +145,8 @@ async function applyRbac(request, { spec, check = false, log = () => {} } = {}) 
     const wanted = { ...def.collections };
     for (const res of current) if ((!res.dataSourceKey || res.dataSourceKey === 'main') && !wanted[res.name]) wanted[res.name] = [];
     for (const [name, actions] of Object.entries(wanted)) {
-      const target = actions.map((x) => ({ name: x.name, fields: fieldsFor(name, x), scopeId: x.scope ? scopeIds[x.scope] : null }));
+      if (def.noFinancial && FIN.collections.includes(name) && actions.length) throw new Error(`${roleName} is noFinancial but lists ${name}`);
+      const target = actions.map((x) => ({ name: x.name, fields: roleFieldsFor(def, name, x), scopeId: x.scope ? scopeIds[x.scope] : null }));
       const existing = current.find((r) => r.name === name && (!r.dataSourceKey || r.dataSourceKey === 'main'));
       const norm = (list) => JSON.stringify((list || []).map((x) => ({ name: x.name, fields: [...(x.fields || [])].sort(), scopeId: x.scopeId ? String(x.scopeId) : null })).sort((p, n) => p.name.localeCompare(n.name)));
       if (existing && existing.usingActionsConfig && norm(existing.actions) === norm(target)) continue;

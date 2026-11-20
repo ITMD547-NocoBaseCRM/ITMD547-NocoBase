@@ -26,21 +26,21 @@ selected in the avatar menu, or their default role. Permissions are never merged
 
 | Module | Admin | Manager | Member | Receptionist | Staff |
 |---|---|---|---|---|---|
-| Dashboard | Full | Full | – | View | Own appointments |
+| Dashboard | Full | Full | – | View | Own appointments, no earnings |
 | Customers | Full | Full | – | Create / view / edit (no delete, no spend totals) | Customers of own appointments, service fields only |
 | Appointments | Full | Full | – | Create / view / edit / reschedule / cancel (no delete) | Own: view; edit status & notes; book for themselves |
-| Booked services | Full | Full | – | Manage lines of an appointment | Own, view |
-| Services & categories | Full | Manage | – | View | Services they perform, view |
+| Booked services | Full | Full | – | Manage lines of an appointment | Own, view (no booked price) |
+| Services & categories | Full | Manage | – | View | Services they perform, view (no price) |
 | Memberships (plans, benefits) | Full | Manage | – | View | – |
 | Customer memberships | Full | Manage | – | Create / view / edit | – |
-| Payments | Full | Manage | – | – | Own appointments, amounts only (for own performance) |
+| Payments | Full | Manage | – | – | – (no financial data at all, see §17) |
 | Employees (staff) | Full | Manage | – | Names, role, specialty | Own record |
 | Employee shifts & availability | Full | Manage | – | Create / view / edit | Own, view |
 | Customer notes | Full | Manage | – | Create / view / edit | Own notes + unassigned notes on own customers; edit own |
 | Customer reviews | Full | Moderate, invitations, all scores | – | Review status; send / resend / regenerate invitations | Own scores |
 | Communication preferences | Full | Record consent, manage suppressions | – | View; record consent (opt-ins need evidence) | – |
 | Revenue & client retention statistics | Full | View | – | – | – |
-| Staff performance | Full | View | – | – | Own |
+| Staff performance | Full | View | – | – | Own, nonfinancial metrics only |
 | Messages, reminders | Full | Manage | – | – | – |
 | Workflows, plugins, collections, API keys, variables & secrets, authentication, users & permissions, system settings, UI configuration | Full | – | – | – | – |
 
@@ -57,7 +57,7 @@ C = create, V = view, U = update, D = destroy, E = export, I = import. `[own]` =
 | services, serviceCategories, staffServices | CVUDEI | V | V[performed], V, V[own] |
 | memberships, membershipBenefits | CVUDEI | V | – |
 | customerMemberships | CVUDEI | CVU | – |
-| payments | CVUDEI | – | V[own appointments]{amount, date, type, status} |
+| payments | CVUDEI | – | – |
 | staff | CVUDEI | V{names, role, specialty} | V[own] |
 | employeeShifts | CVUDEI | CVU | V[own] |
 | staffAvailabilitySchedules / Overrides / Leaves | CVUDEI | CVU | V[own] |
@@ -102,7 +102,7 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Role | Hidden / read-only |
 |---|---|
 | Receptionist | Customers: `totalSpent`, payments hidden; consent flags readable but changed only through consent events; staff email/phone hidden; no payment data anywhere (removed from related records too). |
-| Staff | Customers: only name, phone, status, skin profile/sensitivities, visit counts. No email, address, date of birth, notes, consent, spend. Payments: no method, reference, customer. Appointments: may change only `status` and `notes`. |
+| Staff | Customers: only name, phone, status, skin profile/sensitivities, visit counts. No email, address, date of birth, notes, consent, spend. No financial data anywhere (§17). Appointments: may change only `status` and `notes`. |
 | Manager | Users: no password, reset token or roles. |
 | Member | Nothing. |
 
@@ -262,3 +262,54 @@ holding root, admin or manager, or who give the Manager role. A plugin that adds
 allowed to Managers until it is added to `HIDDEN_SETTINGS` in `rbac-spec.js`, but its APIs keep their own ACL checks.
 - **Change permissions:** edit `scripts/rbac/rbac-spec.js`, then `yarn apply:rbac --check` and `yarn apply:rbac`.
   Changes made by hand in Roles & Permissions are reported (and reverted) by the next apply.
+
+## 17. Financial data (Staff)
+
+Staff users get no revenue or other financial information anywhere in the CRM. Two independent server-side layers
+enforce this; the pages only follow what the server allows.
+
+**What counts as financial** (`FINANCIAL` in `scripts/rbac/rbac-spec.js`, identical to
+`packages/plugins/@parlour/plugin-crm/src/server/financial-guard.ts`; a static test checks they match):
+the `payments` table; `appointments.payments`; `appointmentServices.priceAtBooking` (appointment revenue);
+`services.price`; `customers.totalSpent` and `customers.payments`; `customerActivity.totalSpent` and `spentLast12m`;
+`customerMemberships.payments`; `memberships.monthlyPrice`.
+
+**Layer 1 – role permissions.** The Staff role has no access to `payments` (the old "own appointments, amounts
+only" access was removed). Every Staff field list (`noFinancial: true`) drops the fields above and every related path
+through them (`appointmentServices.service.price`, `customer.totalSpent`, `payments.amount` …), so NocoBase's own
+field and aggregate (`:query`) checks already leave them out.
+
+**Layer 2 – financial guard** (CRM plugin, runs on every collection request after the ACL). For Staff, Member and
+signed-out callers – every role except root, Admin, Manager and Receptionist:
+- the payments table and association resources such as `customers/1/payments` or `appointments/1/payments` → 403;
+- a filter, sort, aggregate measure/dimension/order or export column that names a financial field, directly or
+  through an association path (`customer.activity.spentLast12m`, `appointmentServices.priceAtBooking`) → 403, so
+  amounts can't be inferred by filtering or sorting;
+- financial entries in `fields` / `appends` / `except` are dropped from the request, and financial values are dropped
+  from writes (prices are filled in on the server);
+- every response is stripped of financial fields and payment records at any depth.
+
+Admin and Manager are not affected and keep full financial access, including all revenue statistics. Receptionist
+keeps its existing restrictions unchanged: no payments or spend totals, but it still sees booked prices and earnings
+on the dashboard, as before.
+
+**Custom endpoints.** `staffWorkspace:get` returns no financial data for anyone (the paid-revenue figure was
+removed). `customerReviewAdmin:scores` returns only review counts and ratings. `crmAccess:get` tells a page whether the
+signed-in role may see financial widgets. It is for display only; the data itself is guarded as above.
+
+**Pages** (`scripts/staff-financial/staff-financial-ui.js`, applied to the existing blocks; Admin/Manager views
+unchanged):
+- *My Workspace*: today's and upcoming appointments, upcoming shifts, assigned customers, notes, completed
+  appointments, completion rate, own review score and review count (12 months), attendance (shifts worked ÷ shifts
+  due, approved leave excluded), shifts on leave and cancellations/no-shows. No revenue.
+- *Statistics → Staff Performance*: for roles without financial access the page doesn't request payments. It shows
+  completed appointments, completion rate, cancellations/no-shows, most booked service, appointments per technician,
+  skill demand and review scores, with no revenue cards or "Revenue per technician" section.
+- *Dashboard*: the Expected / Current earnings cards and per-appointment amounts are shown only to roles with
+  financial access.
+- *Services → Service List*: the price column is empty for Staff (the server returns no prices).
+
+**Verified** by `scripts/rbac/verify-rbac.js` (Staff: workspace, appointment details, customer records, service
+views, Staff Performance and statistics aggregates, direct API requests, related collection queries, association
+resources, filters, sorts and exports; Admin/Manager still get revenue; Receptionist unchanged) and the unit tests in
+`packages/plugins/@parlour/plugin-crm/src/server/financial-guard.test.ts` (`yarn test:financial-guard`).

@@ -4,7 +4,7 @@
  * The employee is resolved on the server from the signed-in user (staff.userId); nothing the browser sends can
  * choose another employee. The caller's current role must already be allowed to read appointments (Staff,
  * Receptionist, Manager, Admin) – a Member-only account gets 403 even if it is linked. All queries filter on the
- * resolved employee id and return only the fields the workspace shows.
+ * resolved employee id and return only the fields the workspace shows. No financial data is returned to anyone.
  */
 
 const TZ = 'America/Chicago';
@@ -60,7 +60,7 @@ export function staffWorkspaceResource(app: any) {
           apptRepo.find({ filter: { staffId, startTime: { $gte: dayEnd, $lt: horizon }, status: { $notIn: ['cancelled'] } }, fields: apptFields, appends, sort: ['startTime'], limit: 30 }),
           apptRepo.find({ filter: { staffId, startTime: { $gte: monthAgo, $lt: dayEnd } }, fields: ['id', 'status', 'customerId', 'startTime'] }),
           db.getRepository('employeeShifts').find({ filter: { staffId, endTime: { $gte: new Date() }, startTime: { $lt: horizon }, status: { $ne: 'cancelled' } }, fields: ['id', 'shiftDate', 'startTime', 'endTime', 'status', 'shiftType'], sort: ['startTime'], limit: 30 }),
-          db.getRepository('employeeShifts').find({ filter: { staffId, startTime: { $gte: monthAgo, $lt: dayEnd } }, fields: ['id', 'status'] }),
+          db.getRepository('employeeShifts').find({ filter: { staffId, startTime: { $gte: monthAgo, $lt: dayEnd } }, fields: ['id', 'status', 'startTime', 'endTime'] }),
         ]);
 
         // Customers of my appointments (last 90 days and upcoming), service-relevant fields only.
@@ -84,13 +84,15 @@ export function staffWorkspaceResource(app: any) {
         });
         const nameOf = new Map(customers.map((c: any) => [String(c.get('id')), `${c.get('firstName') || ''} ${c.get('lastName') || ''}`.trim()]));
 
-        // Personal metrics, last 30 days.
-        const recentIds = recent.map((a: any) => a.get('id'));
-        const payments = recentIds.length
-          ? await db.getRepository('payments').find({ filter: { appointmentId: { $in: recentIds }, status: 'paid', paymentType: { $ne: 'refund' } }, fields: ['amount'] })
-          : [];
+        // Personal metrics, last 30 days. Nonfinancial only: appointment counts and attendance (no revenue, sales,
+        // earnings or payment data for anyone here – this is the technicians' page).
         const count = (status: string) => recent.filter((a: any) => a.get('status') === status).length;
         const past = recent.filter((a: any) => new Date(a.get('startTime')).getTime() < Date.now());
+        const nowMs = Date.now();
+        const pastShifts = monthShifts.filter((s: any) => s.get('status') !== 'cancelled' && new Date(s.get('endTime') || s.get('startTime')).getTime() < nowMs);
+        const worked = pastShifts.filter((s: any) => s.get('status') === 'completed').length;
+        const onLeave = pastShifts.filter((s: any) => s.get('status') === 'onLeave').length;
+        const unrecorded = pastShifts.length - worked - onLeave; // past shifts still marked "scheduled"
         const metrics = {
           periodDays: 30,
           appointments: recent.length,
@@ -98,10 +100,17 @@ export function staffWorkspaceResource(app: any) {
           cancelled: count('cancelled'),
           noShow: count('noShow'),
           completionRate: past.length ? Math.round((count('completed') / past.length) * 100) : null,
-          revenue: Math.round(payments.reduce((sum: number, p: any) => sum + Number(p.get('amount') || 0), 0) * 100) / 100,
           shifts: monthShifts.length,
-          shiftsCompleted: monthShifts.filter((s: any) => s.get('status') === 'completed').length,
-          shiftsOnLeave: monthShifts.filter((s: any) => s.get('status') === 'onLeave').length,
+          shiftsCompleted: worked,
+          shiftsOnLeave: onLeave,
+          attendance: {
+            pastShifts: pastShifts.length,
+            worked,
+            onLeave,
+            unrecorded,
+            // Worked ÷ shifts that should have been worked (approved leave is not counted against attendance).
+            rate: worked + unrecorded ? Math.round((worked / (worked + unrecorded)) * 100) : null,
+          },
         };
 
         ctx.body = {

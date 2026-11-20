@@ -12,7 +12,6 @@ const h = React.createElement;
 const TZ = 'America/Chicago';
 const time = (v) => (v ? new Date(v).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' }) : '');
 const day = (v) => (v ? new Date(v).toLocaleDateString('en-US', { timeZone: TZ, weekday: 'short', month: 'short', day: 'numeric' }) : '');
-const money = (n) => (n == null ? '—' : `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const STATUS_COLOR = { scheduled: 'blue', confirmed: 'cyan', inProgress: 'purple', completed: 'green', cancelled: 'default', noShow: 'red', onLeave: 'orange' };
 const label = (s) => String(s || '').replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 const errText = (e) => e?.response?.data?.errors?.[0]?.message || e?.message || 'Could not load your workspace.';
@@ -85,6 +84,7 @@ function Workspace() {
   if (state.error) return h(Alert, { type: 'warning', showIcon: true, message: state.error, action: h(Button, { size: 'small', onClick: load }, 'Retry') });
   const d = state.data;
   const m = d.metrics;
+  const att = m.attendance || null;
   const myScore = (() => {
     const sc = state.scores;
     const rows = (sc && (sc.staff || sc.rows || sc.byStaff)) || [];
@@ -111,11 +111,13 @@ function Workspace() {
         'div',
         { className: 'bw-ws-kpis' },
         ...[
+          // Nonfinancial only: no revenue, sales, earnings or payment figures on this page.
           [m.completed, 'Completed appointments'],
           [m.completionRate == null ? '—' : `${m.completionRate}%`, 'Completion rate'],
-          [money(m.revenue), 'Revenue (paid)'],
-          [myScore && myScore.avg != null ? `${Number(myScore.avg).toFixed(1)} ★` : '—', `Review average${myScore && myScore.count != null ? ` · ${myScore.count} reviews` : ''}`],
-          [`${m.shiftsCompleted}/${m.shifts}`, 'Shifts completed'],
+          [myScore && myScore.avg != null ? `${Number(myScore.avg).toFixed(1)} ★` : '—', 'Review score (12 months)'],
+          [myScore && myScore.count != null ? myScore.count : 0, 'Reviews received (12 months)'],
+          [att && att.rate != null ? `${att.rate}%` : '—', `Attendance${att ? ` · ${att.worked}/${att.worked + att.unrecorded} shifts` : ''}`],
+          [att ? att.onLeave : m.shiftsOnLeave, 'Shifts on leave'],
           [m.noShow + m.cancelled, 'Cancelled / no-show'],
         ].map(([v, l], i) => h('div', { key: i, className: 'bw-ws-kpi' }, h('div', { className: 'v' }, v), h('div', { className: 'l' }, l))),
       ),

@@ -114,8 +114,9 @@ On the Staff page, Managers see the account status list with **Request account**
 ## 8. Staff workspace
 
 **My Workspace** (Beauty Within Portal, after Dashboard; Staff role) – one mobile-friendly page:
-performance for the last 30 days (completed appointments, completion rate, paid revenue on their appointments,
-review average and count, shifts completed, cancelled/no-show), today's appointments (with skin-sensitivity
+nonfinancial performance for the last 30 days (completed appointments, completion rate, attendance, shifts on leave,
+cancelled/no-show) plus their review score and review count (12 months) – no revenue, earnings or payment data
+(docs/rbac.md §17) – today's appointments (with skin-sensitivity
 warnings), upcoming appointments and shifts (15 days), their customers (last 90 days + upcoming; name, phone, skin
 profile only), and recent notes (their own and front-desk notes on their customers).
 
