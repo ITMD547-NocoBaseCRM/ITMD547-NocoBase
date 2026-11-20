@@ -1,0 +1,20 @@
+{
+  "name": "@salon/plugin-customer-reviews",
+  "displayName": "Customer reviews (BeautyWithin)",
+  "description": "T-05: automatic, secure single-use review invitations after completed appointments, a public review page, review moderation and per-technician Client Review Scores.",
+  "version": "0.1.0",
+  "main": "dist/server/index.js",
+  "license": "Apache-2.0",
+  "keywords": [
+    "Others"
+  ],
+  "peerDependencies": {
+    "@nocobase/client": "2.x",
+    "@nocobase/client-v2": "2.x",
+    "@nocobase/database": "2.x",
+    "@nocobase/plugin-notification-manager": "2.x",
+    "@nocobase/plugin-workflow": "2.x",
+    "@nocobase/server": "2.x",
+    "@nocobase/test": "2.x"
+  }
+}

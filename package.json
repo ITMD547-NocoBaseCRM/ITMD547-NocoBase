@@ -59,7 +59,9 @@
     "seed:customer-activity": "node scripts/seed-customer-activity.js",
     "apply:customer-forms": "node scripts/apply-customer-forms.js",
     "apply:customer-messaging": "node scripts/apply-customer-messaging.js",
-    "apply:customer-birthday": "node scripts/apply-customer-birthday.js"
+    "apply:customer-birthday": "node scripts/apply-customer-birthday.js",
+    "apply:customer-reviews": "node scripts/apply-customer-reviews.js",
+    "test:customer-reviews": "node --test --test-concurrency=1 scripts/customer-reviews.test.js packages/plugins/@salon/plugin-customer-reviews/src/server/__tests__/core.test.ts"
   },
   "resolutions": {
     "cytoscape": "3.28.0",
