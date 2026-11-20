@@ -29,7 +29,7 @@ invitation, and tied to the employee record. Technicians then see their own work
 - Links are made only by the onboarding actions (Admin) or by an Admin editing the employee; never by matching
   names or emails. Receptionist/Staff/Member can't write `staff.userId` (RBAC, tested).
 
-## 3. Onboarding workflow (Staff page → Employee accounts)
+## 3. Onboarding workflow (Settings → Staff Access → Employee accounts)
 
 **Add employee & invite** (Admin): employee fields (first/last name, email, phone, job title, specialty) + CRM role
 (Staff, Receptionist, Manager; default from the job title). The server, in order:
@@ -65,7 +65,7 @@ browser or the onboarding tables; the invitation nonce is never returned.
 
 ## 5. Existing employees (migration)
 
-On the Staff page every employee without an account shows **No account** with **Invite to CRM** and **Link existing
+In Staff Access → Employee accounts every employee without an account shows **No account** with **Invite to CRM** and **Link existing
 user**. The Admin checks the name and email, picks the role, and either invites (new account) or links the account
 the person already has (chosen from a list of users not linked to any employee; emails shown only to confirm).
 Employee ids and all history stay as they are.
@@ -95,10 +95,15 @@ Every action is written to `employeeAccountEvents` (append-only; read-only for A
 employee_created, user_created, linked, role_assigned, invitation_sent, invitation_resent, provisioning_failed,
 provisioning_requested, activated, disabled, offboarded, reactivated, unlinked – with who did it and details.
 
-## 7. Employee management UI (Staff page)
+## 7. Employee management UI
 
-New **Employee accounts** panel above the employee table: employee, job title, employment, CRM role, linked account,
-account status, invitation (status, expiry), last Clerk sign-in, actions.
+**Settings → Staff Access → Employee accounts** (first tab, next to Link and Invite; Admin only): employee, job
+title, employment, CRM role, linked account, account status, invitation (status, expiry), last Clerk sign-in,
+actions. Component: `packages/plugins/@salon/plugin-auth-clerk/src/client-v2/shared/EmployeeAccountsPanel.tsx`
+(used by both the legacy and the modern client).
+
+**Staff page**: a small block above the employee table. Admins see a pointer with an *Open Staff Access* button;
+Managers (who can't open Staff Access) see the read-only account status list with **Request account**.
 
 - Admin: Add employee & invite · Invite to CRM · Link existing user · Resend invitation · Retry · Send invitation ·
   Disable (optionally "the employee has left" = offboard) · Reactivate · Unlink (reason required) · History.
@@ -169,7 +174,8 @@ not disabled here (remove the Admin role in Users & Permissions first).
 | `…/src/server/schema/employee-accounts.ts` | the two tables |
 | `…/src/server/plugin.ts` | registration, ACL guard, activation hook, table sync |
 | `packages/plugins/@parlour/plugin-crm/src/server/staff-workspace.ts`, `plugin.ts` | `staffWorkspace:get` |
-| `scripts/ui/employee-accounts-panel.js` | Staff page panel |
+| `…/src/client-v2/shared/EmployeeAccountsPanel.tsx`, `StaffLinksPage.tsx` | Staff Access → Employee accounts tab |
+| `scripts/ui/employee-accounts-panel.js` | Staff page block (Admin pointer, Manager status + Request account) |
 | `scripts/ui/staff-workspace-block.js` | My Workspace |
 | `scripts/onboarding/onboarding-ui-core.js`, `scripts/apply-employee-onboarding.js` | `yarn apply:employee-onboarding [--check]` |
 | `scripts/rbac/rbac-spec.js` | My Workspace menu |

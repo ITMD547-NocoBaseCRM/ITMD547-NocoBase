@@ -1,4 +1,7 @@
-// BW-EMPLOYEE-ACCOUNTS v1 – "Employee accounts" panel on the Staff page (employee onboarding).
+// BW-EMPLOYEE-ACCOUNTS v2 – account status on the Staff page (employee onboarding).
+//
+// v2: administrators manage accounts in Settings → Staff Access → Employee accounts; here they get a pointer.
+// Managers (who can't open Staff Access) keep the read-only status list and the "Request account" action.
 //
 // Runs in NocoBase's JS block runtime. All data and actions go through the server resource employeeOnboarding
 // (@salon/plugin-auth-clerk), which enforces who may do what:
@@ -191,6 +194,15 @@ function EmployeeAccounts() {
     { title: 'Last sign-in', dataIndex: 'lastSignInAt', key: 'last', render: (v) => fmt(v) || '—' },
     { title: 'Actions', key: 'actions', render: (_, r) => actionsFor(r) },
   ];
+
+  if (state.canManage) {
+    return h(Alert, {
+      type: 'info',
+      showIcon: true,
+      message: 'Employee CRM accounts are managed in Settings → Staff Access → Employee accounts.',
+      action: h(Button, { size: 'small', type: 'primary', href: '/admin/settings/auth-clerk' }, 'Open Staff Access'),
+    });
+  }
 
   return h(
     'div',

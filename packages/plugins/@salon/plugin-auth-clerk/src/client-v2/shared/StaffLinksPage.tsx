@@ -24,6 +24,7 @@ import { errorText, roleTitle, UserPicker, userLabel } from './admin-common';
 import type { NocoUser } from './admin-common';
 import type { ApiClientLike } from './clerk-common';
 import { StaffInvitationsPanel } from './StaffInvitationsPanel';
+import { EmployeeAccountsPanel } from './EmployeeAccountsPanel';
 
 type Link = {
   id: number;
@@ -331,7 +332,13 @@ export function StaffLinksPage({ api }: { api: ApiClientLike }) {
           />
         ) : null}
         <Tabs
+          defaultActiveKey="accounts"
           items={[
+            {
+              key: 'accounts',
+              label: t('Employee accounts'),
+              children: <EmployeeAccountsPanel api={api} />,
+            },
             {
               key: 'link',
               label: t('Link'),
