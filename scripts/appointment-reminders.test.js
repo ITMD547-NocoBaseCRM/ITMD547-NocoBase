@@ -46,10 +46,10 @@ describe('appointment-reminders definitions', () => {
       assert.strictEqual(def.name, SETTINGS_COLLECTION);
     });
 
-    it('includes enabledIntervals field with checkboxGroup interface', () => {
+    it('includes enabledIntervals field with multipleSelect interface', () => {
       const field = def.fields.find((f) => f.name === 'enabledIntervals');
       assert.ok(field, 'enabledIntervals field should exist');
-      assert.strictEqual(field.interface, 'checkboxGroup');
+      assert.strictEqual(field.interface, 'multipleSelect');
       assert.strictEqual(field.type, 'json');
       assert.deepStrictEqual(field.defaultValue, ['24h', '48h']);
     });

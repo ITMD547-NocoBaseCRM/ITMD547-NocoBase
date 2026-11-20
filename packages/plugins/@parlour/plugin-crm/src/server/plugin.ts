@@ -396,6 +396,197 @@ export class PluginCrmServer extends Plugin {
     // the signed-in user's bearer token and normal collection ACL.
     this.app.acl.allow('salonMobileDashboard', 'get', 'public');
 
+    // ─── Public spin-to-win promo games ─────────────────────────────────────────
+    // Each promoGames row can carry a publicToken; the link /api/promoPlay:page?token=...
+    // serves a standalone page (scripts/ui/promo-play.html) where a customer enters their
+    // email and spins. The draw happens HERE, server side: weighted over segments that still
+    // have win stock, one spin per email per game. A win queues/sends an email with the
+    // coupon code through the same pipeline as the other CRM emails, and every spin is
+    // recorded in promoGameSpins.
+
+    const promoEligibleItems = (items: any[], winCountByItemId: Record<string, number>) =>
+      items.filter((item) => {
+        if (!(Number(item.weight) > 0)) return false;
+        if (item.kind === 'noWin') return true;
+        const limit = Number(item.winLimit) || 0;
+        if (!limit) return true;
+        return (winCountByItemId[String(item.id)] || 0) < limit;
+      });
+
+    const promoPickWeighted = (items: any[]) => {
+      const total = items.reduce((sum, i) => sum + Number(i.weight), 0);
+      if (!total) return null;
+      let roll = Math.random() * total;
+      for (const item of items) {
+        roll -= Number(item.weight);
+        if (roll < 0) return item;
+      }
+      return items[items.length - 1] || null;
+    };
+
+    const promoLoadGame = async (token: string) => {
+      if (!token || typeof token !== 'string' || token.length < 8) return null;
+      const repo = this.db.getRepository('promoGames');
+      if (!repo) return null;
+      const game = await repo.findOne({ filter: { publicToken: token } });
+      if (!game || game.get('status') !== 'active') return null;
+      return game;
+    };
+
+    const promoWheel = async (game: any) => {
+      const items = await this.db.getRepository('promoGameItems').find({ filter: { gameId: game.get('id') }, sort: ['createdAt'], appends: ['coupon'] });
+      const spins = await this.db.getRepository('promoGameSpins').find({ filter: { gameId: game.get('id'), won: true }, fields: ['id', 'itemId'] });
+      const winCounts: Record<string, number> = {};
+      for (const s of spins) {
+        const key = String(s.get('itemId'));
+        winCounts[key] = (winCounts[key] || 0) + 1;
+      }
+      const plain = items.map((i: any) => ({
+        id: i.get('id'), label: i.get('label'), kind: i.get('kind'), weight: Number(i.get('weight')) || 0,
+        winLimit: Number(i.get('winLimit')) || 0, color: i.get('color'),
+        couponCode: i.get('coupon')?.get?.('code') || i.get('coupon')?.code || null,
+      }));
+      return { eligible: promoEligibleItems(plain, winCounts), all: plain };
+    };
+
+    this.app.resourceManager.define({
+      name: 'promoPlay',
+      actions: {
+        page: async (ctx: any) => {
+          const pagePath = path.resolve(process.cwd(), 'scripts', 'ui', 'promo-play.html');
+          ctx.withoutDataWrapping = true;
+          ctx.type = 'text/html; charset=utf-8';
+          ctx.set('Cache-Control', 'no-store');
+          ctx.body = fs.readFileSync(pagePath, 'utf8');
+        },
+        get: async (ctx: any) => {
+          const token = String(ctx.action?.params?.token || '');
+          const game = await promoLoadGame(token);
+          if (!game) {
+            ctx.body = { ok: false, message: 'This game is not available.' };
+            return;
+          }
+          const { eligible } = await promoWheel(game);
+          ctx.body = {
+            ok: true,
+            name: game.get('name'),
+            // Only what the wheel needs: no stock counts or coupon codes before the spin.
+            items: eligible.map((i: any) => ({ id: i.id, label: i.label, weight: i.weight, color: i.color })),
+          };
+        },
+        spin: async (ctx: any) => {
+          const values = ctx.action?.params?.values || {};
+          const token = String(values.token || '');
+          const email = String(values.email || '').trim().toLowerCase();
+          if (!/^\S+@\S+\.\S+$/.test(email)) {
+            ctx.body = { ok: false, message: 'Please enter a valid email address.' };
+            return;
+          }
+          const game = await promoLoadGame(token);
+          if (!game) {
+            ctx.body = { ok: false, message: 'This game is not available.' };
+            return;
+          }
+          const gameId = game.get('id');
+          const spinRepo = this.db.getRepository('promoGameSpins');
+          const played = await spinRepo.count({ filter: { gameId, email } });
+          if (played > 0) {
+            ctx.body = { ok: false, message: 'This email has already played this game. One spin per person!' };
+            return;
+          }
+          const { eligible } = await promoWheel(game);
+          if (!eligible.length) {
+            ctx.body = { ok: false, message: 'All prizes have been claimed. Thanks for playing!' };
+            return;
+          }
+          const winner: any = promoPickWeighted(eligible);
+          const won = winner.kind !== 'noWin';
+
+          // Match or create the customer by email, so the spin and the win email join the CRM.
+          const customerRepo = this.db.getRepository('customers');
+          let customer = await customerRepo.findOne({ filter: { email } });
+          if (!customer) {
+            try {
+              customer = await customerRepo.create({
+                values: { firstName: email.split('@')[0], email, status: 'active' },
+              });
+            } catch (createErr: any) {
+              this.app.logger.warn('[promo-play] could not create customer for ' + email + ': ' + (createErr?.message || String(createErr)));
+            }
+          }
+
+          await spinRepo.create({
+            values: { gameId, itemId: winner.id, customerId: customer?.get('id') || null, email, spunAt: new Date(), won },
+            hooks: false,
+          });
+
+          // Win email: immediate attempt, recorded in customerMessages either way
+          // (the periodic email sender retries anything left queued).
+          if (won) {
+            const firstName = customer?.get('firstName') || email.split('@')[0];
+            const subject = `You won ${winner.label} at Beauty Within! 🎉`;
+            const bodyParts = [
+              `<p>Hi ${firstName},</p>`,
+              `<p>Congratulations — you spun the wheel and won <strong>${winner.label}</strong>!</p>`,
+            ];
+            if (winner.couponCode) {
+              bodyParts.push(`<p>Your coupon code:</p><p style="font-size:22px;font-weight:bold;letter-spacing:1px;background:#fff2e8;border:1px dashed #d4621c;border-radius:6px;display:inline-block;padding:6px 16px">${winner.couponCode}</p>`);
+              bodyParts.push('<p>Show this code at your next visit to redeem it.</p>');
+            } else {
+              bodyParts.push('<p>Mention this win at your next visit to claim your prize.</p>');
+            }
+            bodyParts.push('<p>See you soon!<br/>Beauty Within</p>');
+            const body = bodyParts.join('\n');
+            const htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#111827;max-width:640px">${body}</div>`;
+
+            let sendStatus = 'queued';
+            let sendError: string | null = null;
+            try {
+              const notifPlugin: any = this.app.pm.get('notification-manager');
+              const manager = notifPlugin?.manager;
+              const channelName = (await this.db.getRepository('notificationChannels').findOne({ filter: { notificationType: 'email' } }))?.get('name');
+              if (manager && channelName) {
+                await manager.send({
+                  channelName,
+                  message: { subject, html: htmlBody, contentType: 'html', to: [email] },
+                  triggerFrom: 'promoGameWin',
+                });
+                sendStatus = 'sent';
+                this.app.logger.info('[promo-play] win email sent to %s (game %s)', email, gameId);
+              }
+            } catch (sendErr: any) {
+              sendError = sendErr?.reason || sendErr?.message || 'send failed';
+              sendStatus = 'failed';
+              this.app.logger.error('[promo-play] win email failed for %s: %s', email, sendError);
+            }
+            try {
+              await this.db.getRepository('customerMessages').create({
+                values: {
+                  channel: 'email', recipient: email, subject, body, bodyHtml: htmlBody,
+                  status: sendStatus, sentAt: sendStatus === 'sent' ? new Date() : null,
+                  error: sendError, customerId: customer?.get('id') || null,
+                },
+                hooks: false,
+              });
+            } catch (logErr: any) {
+              this.app.logger.warn('[promo-play] could not record win email: %s', logErr?.message);
+            }
+          }
+
+          ctx.body = {
+            ok: true,
+            itemId: winner.id,
+            label: winner.label,
+            won,
+            couponCode: won ? winner.couponCode : null,
+          };
+        },
+      },
+    });
+    // The page and its two endpoints are public by design: the token is the only secret, the
+    // draw and limits run server side, and no collection data beyond the wheel is exposed.
+    this.app.acl.allow('promoPlay', ['page', 'get', 'spin'], 'public');
+
     const server = process.env.AZURE_SQL_SERVER;
     const database = process.env.AZURE_SQL_DATABASE;
     const user = process.env.AZURE_SQL_USER;

@@ -97,12 +97,13 @@ function settingsCollectionDefinition() {
       {
         name: 'enabledIntervals',
         type: 'json',
-        interface: 'checkboxGroup',
+        interface: 'multipleSelect',
         defaultValue: ['24h', '48h'],
         uiSchema: {
           type: 'array',
           title: 'Reminder intervals',
-          'x-component': 'Checkbox.Group',
+          'x-component': 'Select',
+          'x-component-props': { mode: 'multiple' },
           'x-decorator': 'FormItem',
           enum: INTERVALS.map((i) => ({ value: i.value, label: i.label })),
         },
