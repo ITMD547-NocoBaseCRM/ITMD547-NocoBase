@@ -183,10 +183,30 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
         },
       },
     });
+    // RBAC: the helpers are open to signed-in users, but each one only answers roles that may already read the
+    // data it is about (appointments for booking checks, employee shifts for leave checks). The availability
+    // tables themselves follow normal role permissions (they used to be open to every signed-in user).
     this.app.acl.allow('appointmentAvailability', ['slots', 'check', 'leaveConflicts', 'shiftLeaveConflict', 'availableStaff'], 'loggedIn');
-    for (const collection of ['staffAvailabilitySchedules', 'staffAvailabilityOverrides', 'staffAvailabilityLeaves', 'appointmentAvailabilitySettings']) {
-      this.app.acl.allow(collection, '*', 'loggedIn');
-    }
+    const NEEDS: Record<string, [string, string]> = {
+      availableStaff: ['appointments', 'create'],
+      slots: ['appointments', 'create'],
+      check: ['appointments', 'create'],
+      leaveConflicts: ['employeeShifts', 'list'],
+      shiftLeaveConflict: ['employeeShifts', 'list'],
+    };
+    this.app.acl.use(
+      async (ctx: any, next: () => Promise<any>) => {
+        if (ctx.permission?.resourceName === 'appointmentAvailability') {
+          const need = NEEDS[ctx.permission.actionName];
+          const roles: string[] = ctx.state.currentRoles?.length ? ctx.state.currentRoles : [ctx.state.currentRole].filter(Boolean);
+          const can = (role: string, resource: string, action: string) =>
+            role === 'root' || !!this.app.acl.can({ role, resource, action }) || (action === 'create' && !!this.app.acl.can({ role, resource, action: 'update' }));
+          if (!need || !roles.some((role) => can(role, need[0], need[1]))) ctx.throw(403, 'No permissions');
+        }
+        await next();
+      },
+      { tag: 'appointment-availability-guard', before: 'allow-manager' },
+    );
   }
 
   async install() {

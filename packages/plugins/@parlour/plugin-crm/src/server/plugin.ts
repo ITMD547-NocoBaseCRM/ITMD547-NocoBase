@@ -2,6 +2,9 @@ import { Plugin } from '@nocobase/server';
 import fs from 'node:fs';
 import path from 'node:path';
 import sql from 'mssql';
+import { associationFieldGuard } from './association-field-guard';
+import { currentRoles, financialGuard, isFinanciallyRestricted } from './financial-guard';
+import { staffWorkspaceResource } from './staff-workspace';
 
 const appointmentCalendarColor = (status: string, staffId: unknown) => {
   if (status === 'cancelled') return 'cancelled';
@@ -317,6 +320,24 @@ export class PluginCrmServer extends Plugin {
   }
 
   async load() {
+    // RBAC: trim related records to the fields the current role may see on their own collection.
+    this.app.dataSourceManager.use(associationFieldGuard(this.app), { tag: 'rbac-association-fields', after: 'acl' });
+    // RBAC: no revenue or other financial data for Staff/Member, however it is requested (see financial-guard.ts).
+    this.app.dataSourceManager.use(financialGuard(this.app), { tag: 'rbac-financial-data', after: 'acl' });
+    // Lets pages ask whether to show financial widgets. Display only: the data itself is guarded above.
+    this.app.resourceManager.define({
+      name: 'crmAccess',
+      actions: {
+        get: async (ctx: any, next: () => Promise<any>) => {
+          ctx.body = { financial: !isFinanciallyRestricted(currentRoles(ctx)) };
+          await next();
+        },
+      },
+    });
+    this.app.acl.allow('crmAccess', 'get', 'loggedIn');
+    // "My Workspace": the signed-in technician's own appointments, shifts, customers, notes and metrics.
+    this.app.resourceManager.define(staffWorkspaceResource(this.app));
+    this.app.acl.allow('staffWorkspace', 'get', 'loggedIn');
     // ─── Periodic email sender ──────────────────────────────────────────────────
     // Processes queued customerMessages (channel='email') every 2 minutes.
     // The scheduled reminder workflow inserts rows via raw SQL which bypasses

@@ -143,19 +143,19 @@ describe('Clerk staff authentication', () => {
     // A broad "all collections" data strategy, as a CRM staff role typically has. It must still not
     // reach the plugin's tables.
     await repo('roles').create({
-      values: { name: 'r_staff', title: 'Staff', strategy: { actions: ['view', 'create', 'update', 'destroy'] } },
+      values: { name: 'staff', title: 'Staff', strategy: { actions: ['view', 'create', 'update', 'destroy'] } },
     });
-    await repo('roles').create({ values: { name: 'r_receptionist', title: 'Receptionist' } });
+    await repo('roles').create({ values: { name: 'receptionist', title: 'Receptionist' } });
     const make = (username: string, roles: string[]) =>
       repo('users').create({ values: { username, email: `${username}@salon.test`, nickname: username, roles } });
     users = {
-      staff: await make('staff', ['r_staff', 'member']),
-      receptionist: await make('receptionist', ['r_receptionist']),
+      staff: await make('staff', ['staff', 'member']),
+      receptionist: await make('receptionist', ['receptionist']),
       memberOnly: await make('memberonly', ['member']),
-      lookalike: await make('lookalike', ['r_staff']),
-      linkTarget: await make('linktarget', ['r_staff']),
-      newHire: await make('newhire', ['r_staff', 'member']),
-      newHire2: await make('newhire2', ['r_receptionist']),
+      lookalike: await make('lookalike', ['staff']),
+      linkTarget: await make('linktarget', ['staff']),
+      newHire: await make('newhire', ['staff', 'member']),
+      newHire2: await make('newhire2', ['receptionist']),
     };
     root = await repo('users').findOne({ filter: { 'roles.name': 'root' } });
   });
@@ -315,12 +315,12 @@ describe('Clerk staff authentication', () => {
     it('ends an existing session when the staff role is removed', async () => {
       await link('user_recep', users.receptionist);
       const { token: nb } = (await signIn(token('user_recep', 'sess_role'))).body.data;
-      await repo('rolesUsers').destroy({ filter: { userId: users.receptionist.id, roleName: 'r_receptionist' } });
+      await repo('rolesUsers').destroy({ filter: { userId: users.receptionist.id, roleName: 'receptionist' } });
       await plugin.staffAccess.clearAccessCache(users.receptionist.id);
       try {
         expect((await check(nb)).status).toBe(401);
       } finally {
-        await repo('rolesUsers').create({ values: { userId: users.receptionist.id, roleName: 'r_receptionist' } });
+        await repo('rolesUsers').create({ values: { userId: users.receptionist.id, roleName: 'receptionist' } });
       }
     });
 
@@ -425,7 +425,7 @@ describe('Clerk staff authentication', () => {
     });
 
     it('denies link management to staff without the settings permission', async () => {
-      const agent = await app.agent().login(users.staff, 'r_staff');
+      const agent = await app.agent().login(users.staff, 'staff');
       clerk.addUser('user_target', 'target@clerk.test');
       expect((await agent.get('/clerkStaffLinks:list')).status).toBe(403);
       expect(
@@ -440,7 +440,7 @@ describe('Clerk staff authentication', () => {
       app.acl.appendStrategyResource(linksCollection);
       app.acl.appendStrategyResource(bindingsCollection);
       try {
-        const agent = await app.agent().login(users.staff, 'r_staff');
+        const agent = await app.agent().login(users.staff, 'staff');
         expect((await agent.get('/clerkStaffLinks:list')).status).toBe(403);
         expect((await agent.get('/clerkSessionBindings:list')).status).toBe(403);
       } finally {
@@ -531,7 +531,7 @@ describe('Clerk staff authentication', () => {
     });
 
     it('lets only administrators manage invitations and refuses generic CRUD on the table', async () => {
-      const staff = await app.agent().login(users.staff, 'r_staff');
+      const staff = await app.agent().login(users.staff, 'staff');
       expect((await staff.get('/clerkStaffInvitations:list')).status).toBe(403);
       expect(
         (await staff.post('/clerkStaffInvitations:create').send({ email: 'x@salon.test', userId: users.staff.id }))
@@ -702,14 +702,14 @@ describe('Clerk staff authentication', () => {
 
     it('refuses acceptance when the invited user lost the staff role, and never adds roles', async () => {
       const row = await inviteAndRegister(users.newHire2, 'role@salon.test', 'user_role');
-      await repo('rolesUsers').destroy({ filter: { userId: users.newHire2.id, roleName: 'r_receptionist' } });
+      await repo('rolesUsers').destroy({ filter: { userId: users.newHire2.id, roleName: 'receptionist' } });
       try {
         const res = await accept(token('user_role', 'sess_role'));
         expect(res.status).toBe(403);
-        expect(await rolesOf(users.newHire2.id)).not.toContain('r_receptionist');
+        expect(await rolesOf(users.newHire2.id)).not.toContain('receptionist');
         expect((await invitationRow(row.get('id'))).get('status')).toBe('pending');
       } finally {
-        await repo('rolesUsers').create({ values: { userId: users.newHire2.id, roleName: 'r_receptionist' } });
+        await repo('rolesUsers').create({ values: { userId: users.newHire2.id, roleName: 'receptionist' } });
       }
     });
 

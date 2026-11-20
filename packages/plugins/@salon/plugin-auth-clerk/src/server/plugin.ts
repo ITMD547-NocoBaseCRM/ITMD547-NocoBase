@@ -25,6 +25,15 @@ import sessionBindingsCollection from './schema/clerk-session-bindings';
 import staffInvitationsCollection from './schema/clerk-staff-invitations';
 import staffLinksCollection from './schema/clerk-staff-links';
 import { StaffAccess } from './staff-access';
+import { EmployeeAccounts, ACCOUNTS as EMPLOYEE_ACCOUNTS, EVENTS as EMPLOYEE_ACCOUNT_EVENTS } from './employee-accounts';
+import { employeeAccountsCollection, employeeAccountEventsCollection } from './schema/employee-accounts';
+import { delegatedAccessGuard } from './delegated-access-guard';
+import {
+  employeeOnboardingActions,
+  ONBOARDING_ADMIN_ACTIONS,
+  ONBOARDING_RESOURCE,
+  ONBOARDING_VIEW_ACTIONS,
+} from './actions/employee-onboarding';
 
 /** The only invitation actions that exist; NocoBase's generic CRUD on the table is refused. */
 const INVITATION_ADMIN_ACTIONS = ['list', 'create', 'resend', 'revoke', 'destroy'];
@@ -35,6 +44,7 @@ export class PluginAuthClerkServer extends Plugin {
   private cache: Cache;
   staffAccess: StaffAccess;
   invitations: StaffInvitations;
+  employeeAccounts: EmployeeAccounts;
 
   /** Re-reads CLERK_* environment variables (they are otherwise read once at load). */
   reloadConfig() {
@@ -80,7 +90,13 @@ export class PluginAuthClerkServer extends Plugin {
    * NocoBase's `db.import` (including `origin`).
    */
   async beforeLoad() {
-    for (const definition of [staffLinksCollection, sessionBindingsCollection, staffInvitationsCollection]) {
+    for (const definition of [
+      staffLinksCollection,
+      sessionBindingsCollection,
+      staffInvitationsCollection,
+      employeeAccountsCollection,
+      employeeAccountEventsCollection,
+    ]) {
       this.db.collection({ ...definition, origin: namespace });
     }
   }
@@ -136,8 +152,9 @@ export class PluginAuthClerkServer extends Plugin {
     });
     this.app.acl.registerSnippet({
       name: aclSnippet,
-      actions: [`${linksCollection}:*`, `${invitationsCollection}:*`],
+      actions: [`${linksCollection}:*`, `${invitationsCollection}:*`, `${ONBOARDING_RESOURCE}:*`],
     });
+    this.registerEmployeeOnboarding();
     // Invited staff have no NocoBase session yet; `accept` authenticates with the Clerk session token.
     this.app.acl.allow(invitationsCollection, 'accept', 'public');
     this.app.acl.use(this.adminOnlyResources(), { tag: 'auth-clerk-admin-only', before: 'allow-manager' });
@@ -146,6 +163,13 @@ export class PluginAuthClerkServer extends Plugin {
     // deployments run `yarn start` (no `nocobase upgrade`). Create only this plugin's missing table;
     // nothing existing is altered.
     this.app.on('beforeStart', async () => {
+      for (const name of [EMPLOYEE_ACCOUNTS, EMPLOYEE_ACCOUNT_EVENTS]) {
+        const table = this.db.getCollection(name);
+        if (table && !(await table.existsInDb())) {
+          await table.sync();
+          this.app.logger.info(`auth-clerk: created the ${name} table`);
+        }
+      }
       const collection = this.db.getCollection(invitationsCollection);
       if (collection && !(await collection.existsInDb())) {
         await collection.sync();
@@ -161,6 +185,63 @@ export class PluginAuthClerkServer extends Plugin {
       tag: 'auth-clerk-guard',
       after: 'auth',
       before: 'default',
+    });
+  }
+
+  /**
+   * Employee account onboarding (docs/employee-onboarding.md). Admin (snippet pm.auth-clerk) provisions, links,
+   * disables and unlinks; anyone who may edit employees (Manager) may read the status and request provisioning.
+   * The two onboarding tables are written only by the server.
+   */
+  private registerEmployeeOnboarding() {
+    this.employeeAccounts = new EmployeeAccounts({
+      db: this.db,
+      logger: this.app.logger,
+      staffAccess: this.staffAccess,
+      invitations: () => this.invitations,
+      clerkConfigured: () => this.configResult.ok === true,
+      clearRoleCache: async (userId) => {
+        await this.app.cache.del(`roles:${userId}`);
+        await this.app.cache.del(`roles:${userId}:defaultRole`);
+      },
+    });
+    const rolesOf = (ctx: any): string[] =>
+      ctx.state.currentRoles?.length ? ctx.state.currentRoles : [ctx.state.currentRole || 'anonymous'];
+    const acl: any = this.app.acl;
+    const isAdmin = (ctx: any) =>
+      rolesOf(ctx).some((r) => r === 'root' || acl.getRole(r)?.snippetAllowed(`${ONBOARDING_RESOURCE}:provision`) === true);
+    const canViewEmployees = (ctx: any) =>
+      rolesOf(ctx).some((r) => r === 'root' || !!acl.can({ role: r, resource: 'staff', action: 'update' }));
+
+    const actions = employeeOnboardingActions(() => this.employeeAccounts, isAdmin);
+    this.app.resourceManager.define({ name: ONBOARDING_RESOURCE, actions });
+    this.app.acl.allow(ONBOARDING_RESOURCE, [...ONBOARDING_VIEW_ACTIONS, ...ONBOARDING_ADMIN_ACTIONS], 'loggedIn');
+    this.app.acl.use(
+      async (ctx: any, next: () => Promise<any>) => {
+        const resource = ctx.permission?.resourceName;
+        const action = ctx.permission?.actionName;
+        if (resource === ONBOARDING_RESOURCE) {
+          const allowed = ONBOARDING_VIEW_ACTIONS.includes(action)
+            ? isAdmin(ctx) || canViewEmployees(ctx)
+            : ONBOARDING_ADMIN_ACTIONS.includes(action) && isAdmin(ctx);
+          if (!allowed) ctx.throw(403, 'No permissions');
+        }
+        if (resource === EMPLOYEE_ACCOUNTS || resource === EMPLOYEE_ACCOUNT_EVENTS) {
+          // Read-only for administrators; all writes go through the onboarding actions.
+          if (!['list', 'get'].includes(action) || !isAdmin(ctx)) ctx.throw(403, 'No permissions');
+        }
+        await next();
+      },
+      { tag: 'employee-onboarding-guard', before: 'allow-manager' },
+    );
+    // Non-admins with Staff Access (Manager) may only manage ordinary staff accounts.
+    this.app.acl.use(delegatedAccessGuard(this.db), { tag: 'auth-clerk-delegation', before: 'allow-manager' });
+    this.db.on(`${linksCollection}.afterCreate`, async (link: any) => {
+      try {
+        await this.employeeAccounts.onClerkLinked(link.get('userId'));
+      } catch (error: any) {
+        this.app.logger.warn('auth-clerk: could not record employee activation', { error: error?.message });
+      }
     });
   }
 

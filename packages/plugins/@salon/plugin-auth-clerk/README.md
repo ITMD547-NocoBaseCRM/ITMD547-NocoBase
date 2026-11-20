@@ -35,7 +35,7 @@ not add or change any routes.
    sessions (`sts`) and impersonation (`act`), and asks the Clerk Backend API that the session is still `active`.
 4. The verified Clerk user id (`sub`, e.g. `user_2abc…`) is looked up in `clerkStaffLinks`. Sign-in is refused
    unless the link exists and is enabled, the NocoBase user exists, and the user holds a staff role
-   (`CLERK_ALLOWED_ROLES`, default `admin,r_staff,r_receptionist`; the default `member` role is not enough).
+   (`CLERK_ALLOWED_ROLES`, default `admin,manager,receptionist,staff`; the default `member` role is not enough).
    A user who holds `root` is always refused, even though NocoBase's root account also holds `admin`.
    **Nothing in the request body is used.** Browser-supplied user ids, emails or roles
    are ignored. Accounts are never linked by matching email.
@@ -81,7 +81,7 @@ section in the root [`.env.example`](../../../../.env.example).
 | `CLERK_JWT_KEY` | server only | no | PEM public key for networkless verification (one line, `\n` escapes). |
 | `CLERK_ISSUER` | server only | no | Override the issuer (default `https://<Frontend API host>`). |
 | `CLERK_AUDIENCE` | server only | no | Require this `aud` (only if you customise the session token). |
-| `CLERK_ALLOWED_ROLES` | server only | no | Staff role names (default `admin,r_staff,r_receptionist`). |
+| `CLERK_ALLOWED_ROLES` | server only | no | Staff role names (default `admin,manager,receptionist,staff`). |
 | `CLERK_SESSION_RECHECK_SECONDS` | server only | no | Clerk session recheck interval, min 30 (default 300). |
 | `CLERK_INVITE_REDIRECT_URL` | server only | no | Where invitation emails send new staff. Must be on a `CLERK_AUTHORIZED_PARTIES` origin. Default `<first authorized origin>/staff-invite`. |
 | `CLERK_INVITATION_EXPIRES_DAYS` | server only | no | Days an invitation link stays valid, 1–30 (default 7). |
@@ -271,8 +271,8 @@ Linking is always an explicit administrator action, recorded with `createdBy`:
 4. Pick the Clerk account, then pick the **existing** NocoBase user yourself (the email is shown only to help
    you confirm it is the same person). Save. The server re-checks the Clerk user exists. One Clerk account ↔ one
    NocoBase user.
-5. Make sure the user has a staff role (Owner/Admin = `admin`, Staff Technician = `r_staff`, Receptionist =
-   `r_receptionist`). The table flags users without one. Roles and permissions are managed as before in
+5. Make sure the user has a staff role (Owner/Admin = `admin`, Manager = `manager`, Staff Technician = `staff`, Receptionist =
+   `receptionist`). The table flags users without one. Roles and permissions are managed as before in
    **Users & Permissions**; the plugin never assigns roles.
 
 To remove access: switch **Enabled** off (takes effect on the next request) or **Unlink**. Deleting a NocoBase
