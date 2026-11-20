@@ -285,33 +285,6 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     }
   }
 
-  private normalizedShift(values: any, previous: any = {}) {
-    const shift = { ...previous, ...values };
-    if (Object.prototype.hasOwnProperty.call(values, 'staff')) {
-      shift.staffId = values.staff && typeof values.staff === 'object' ? values.staff.id : values.staff;
-    }
-    return shift;
-  }
-
-  private async validateShiftRequest(action: any, allowLeaveOverride = false) {
-    const { values = {}, filterByTk, filter } = action.params || {};
-    const fields = ['staffId', 'staff', 'startTime', 'endTime', 'status'];
-    if (action.actionName === 'update' && !fields.some((field) => Object.prototype.hasOwnProperty.call(values, field))) return [];
-    const previous = action.actionName === 'create' ? [{}] : await this.db.getRepository('employeeShifts').find({
-      ...(filterByTk != null ? { filterByTk } : {}), ...(filter ? { filter } : {}),
-    });
-    const conflicts = [];
-    for (const row of previous) {
-      const shift = this.normalizedShift(values, row.get ? row.get({ plain: true }) : row);
-      const conflict = await this.availability.shiftLeaveConflict(shift);
-      if (conflict) {
-        if (!allowLeaveOverride) throw new AvailabilityError(conflict.message);
-        conflicts.push(conflict);
-      }
-    }
-    return conflicts;
-  }
-
   private async validateAppointmentService(model: any, options: any = {}) {
     const values = model.get ? model.get() : model;
     const isExisting = model.isNewRecord !== true && values.id != null;
@@ -338,6 +311,33 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
       this.app.logger.error('Appointment service eligibility validation failed', { error: error instanceof Error ? error.message : 'unknown error' });
       throw new AvailabilityError('Service eligibility could not be verified. Please try again.');
     }
+  }
+
+  private normalizedShift(values: any, previous: any = {}) {
+    const shift = { ...previous, ...values };
+    if (Object.prototype.hasOwnProperty.call(values, 'staff')) {
+      shift.staffId = values.staff && typeof values.staff === 'object' ? values.staff.id : values.staff;
+    }
+    return shift;
+  }
+
+  private async validateShiftRequest(action: any, allowLeaveOverride = false) {
+    const { values = {}, filterByTk, filter } = action.params || {};
+    const fields = ['staffId', 'staff', 'startTime', 'endTime', 'status'];
+    if (action.actionName === 'update' && !fields.some((field) => Object.prototype.hasOwnProperty.call(values, field))) return [];
+    const previous = action.actionName === 'create' ? [{}] : await this.db.getRepository('employeeShifts').find({
+      ...(filterByTk != null ? { filterByTk } : {}), ...(filter ? { filter } : {}),
+    });
+    const conflicts = [];
+    for (const row of previous) {
+      const shift = this.normalizedShift(values, row.get ? row.get({ plain: true }) : row);
+      const conflict = await this.availability.shiftLeaveConflict(shift);
+      if (conflict) {
+        if (!allowLeaveOverride) throw new AvailabilityError(conflict.message);
+        conflicts.push(conflict);
+      }
+    }
+    return conflicts;
   }
 
   private async validateLeave(model: any, options?: any) {

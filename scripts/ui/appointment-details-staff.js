@@ -42,7 +42,7 @@ async function availableOptions() {
   }));
   const options = checked.filter(Boolean).map((item) => ({ value: item.id, label: nameOf(item) }));
   if (record.staff?.id && !options.some((item) => String(item.value) === String(record.staff.id))) {
-    options.unshift({ value: record.staff.id, label: nameOf(record.staff) + ' (currently assigned, unavailable)', disabled: true });
+    options.unshift({ value: record.staff.id, label: nameOf(record.staff) + ' (currently assigned)' });
   }
   return options;
 }
