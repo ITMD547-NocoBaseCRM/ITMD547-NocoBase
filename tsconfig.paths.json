@@ -43,6 +43,18 @@
       "@salon/plugin-auth-clerk": [
         "packages/plugins/@salon/plugin-auth-clerk/src"
       ],
+      "@salon/plugin-customer-reviews/client": [
+        "packages/plugins/@salon/plugin-customer-reviews/src/client"
+      ],
+      "@salon/plugin-customer-reviews/client-v2": [
+        "packages/plugins/@salon/plugin-customer-reviews/src/client-v2"
+      ],
+      "@salon/plugin-customer-reviews/package.json": [
+        "packages/plugins/@salon/plugin-customer-reviews/package.json"
+      ],
+      "@salon/plugin-customer-reviews": [
+        "packages/plugins/@salon/plugin-customer-reviews/src"
+      ],
       "@salon/plugin-welcome-page/client": [
         "packages/plugins/@salon/plugin-welcome-page/src/client"
       ],

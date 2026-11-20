@@ -1,0 +1,714 @@
+{
+ "takenAt": "2026-11-20T02:53:51.861Z",
+ "note": "RBAC state before the RBAC rebuild. Restore with scripts/rollback-rbac.js.",
+ "roles": {
+  "admin": {
+   "role": {
+    "name": "admin",
+    "title": "{{t(\"Admin\")}}",
+    "default": false,
+    "hidden": false,
+    "allowConfigure": true,
+    "allowNewMenu": true,
+    "snippets": [
+     "!app",
+     "pm",
+     "pm.*",
+     "ui.*"
+    ],
+    "strategy": {
+     "actions": [
+      "create",
+      "view",
+      "update",
+      "destroy",
+      "export",
+      "importXlsx"
+     ]
+    }
+   },
+   "dataSourceStrategy": {
+    "actions": [
+     "create",
+     "view",
+     "update",
+     "destroy",
+     "export",
+     "importXlsx"
+    ]
+   },
+   "resources": [],
+   "desktopRoutes": [
+    388680870985728,
+    388680873082880,
+    388680873082881,
+    388681007300608,
+    388681009397760,
+    388681338650624,
+    388681340747776,
+    388682043293696,
+    388682043293697,
+    388682141859840,
+    388682143956992,
+    388682452238336,
+    388682452238337,
+    388682764713984,
+    388682764713985,
+    388683081383936,
+    388683081383937,
+    388683393859584,
+    388683393859585,
+    388683710529536,
+    388683710529537,
+    389452714934272,
+    389452714934273,
+    389452752683008,
+    389452752683009,
+    389452777848832,
+    389452777848833,
+    389452800917504,
+    389452800917505,
+    389452823986176,
+    389452823986177,
+    389452847054848,
+    389452847054849,
+    389452870123520,
+    389452872220672,
+    389452891095040,
+    389452893192192,
+    389452916260864,
+    389452916260865,
+    389452941426688,
+    389452941426689,
+    389783018471424,
+    389783018471425,
+    390752654327808,
+    390752811614208,
+    390752826294272,
+    390752832585728,
+    390752838877184,
+    390752874528768,
+    391024816422912,
+    391093070331904,
+    391093760294912,
+    393308695166976,
+    393308697264128,
+    393431879974912,
+    393976074010624,
+    393976074010625,
+    395019652235264,
+    395911726104576,
+    395911726104577,
+    395919204548608,
+    395964905684992,
+    395964905684993,
+    395964907782144,
+    398093206552576,
+    398510996979712,
+    398510999076864,
+    398511156363264,
+    398511393341440,
+    398693152522240
+   ]
+  },
+  "manager": {
+   "role": {
+    "name": "manager",
+    "title": "Manager",
+    "default": false,
+    "hidden": false,
+    "allowConfigure": false,
+    "allowNewMenu": false,
+    "snippets": [
+     "!app",
+     "!pm",
+     "!pm.acl.roles",
+     "!pm.ai",
+     "!pm.ai.employees",
+     "!pm.ai.llm-services",
+     "!pm.ai.mcp-settings",
+     "!pm.ai.settings",
+     "!pm.api-doc.documentation",
+     "!pm.api-keys.configuration",
+     "!pm.api-keys.index",
+     "!pm.auth",
+     "!pm.auth.authenticators",
+     "!pm.backups",
+     "!pm.backups.settings",
+     "!pm.data-source-manager",
+     "!pm.data-source-manager*",
+     "!pm.environment-variables",
+     "!pm.environment.index",
+     "!pm.file-manager.index",
+     "!pm.file-manager.storages",
+     "!pm.license-settings",
+     "!pm.logger",
+     "!pm.logger.index",
+     "!pm.notification",
+     "!pm.notification.channels",
+     "!pm.notification.logs",
+     "!pm.routes",
+     "!pm.security",
+     "!pm.security.token-policy",
+     "!pm.system-settings.system-settings",
+     "!pm.theme-editor.themes",
+     "!pm.ui-templates.templates",
+     "!pm.verification",
+     "!pm.verification.verifiers",
+     "!pm.workflow.workflows",
+     "!ui.*",
+     "pm.*"
+    ],
+    "strategy": {
+     "actions": [
+      "create",
+      "view",
+      "update",
+      "destroy",
+      "export",
+      "importXlsx",
+      "trigger",
+      "triggerNew"
+     ]
+    }
+   },
+   "dataSourceStrategy": {
+    "actions": [
+     "create",
+     "view",
+     "update",
+     "destroy",
+     "export",
+     "importXlsx",
+     "trigger",
+     "triggerNew"
+    ]
+   },
+   "resources": [
+    {
+     "name": "users",
+     "usingActionsConfig": true,
+     "actions": [
+      {
+       "name": "update",
+       "fields": [
+        "email",
+        "nickname",
+        "phone",
+        "staff",
+        "username"
+       ],
+       "scopeId": null
+      },
+      {
+       "name": "view",
+       "fields": [
+        "createdAt",
+        "email",
+        "id",
+        "nickname",
+        "phone",
+        "roles",
+        "staff",
+        "updatedAt",
+        "username"
+       ],
+       "scopeId": null
+      },
+      {
+       "name": "create",
+       "fields": [
+        "email",
+        "nickname",
+        "password",
+        "phone",
+        "roles",
+        "staff",
+        "username"
+       ],
+       "scopeId": null
+      }
+     ]
+    },
+    {
+     "name": "roles",
+     "usingActionsConfig": true,
+     "actions": [
+      {
+       "name": "view",
+       "fields": [
+        "description",
+        "name",
+        "title"
+       ],
+       "scopeId": null
+      }
+     ]
+    }
+   ],
+   "desktopRoutes": [
+    388680870985728,
+    388680873082880,
+    388680873082881,
+    388681007300608,
+    388681009397760,
+    388681338650624,
+    388681340747776,
+    388682043293696,
+    388682043293697,
+    388682141859840,
+    388682143956992,
+    388682452238336,
+    388682452238337,
+    388682764713984,
+    388682764713985,
+    388683081383936,
+    388683081383937,
+    388683393859584,
+    388683393859585,
+    388683710529536,
+    388683710529537,
+    389452714934272,
+    389452714934273,
+    389452752683008,
+    389452752683009,
+    389452777848832,
+    389452777848833,
+    389452800917504,
+    389452800917505,
+    389452823986176,
+    389452823986177,
+    389452847054848,
+    389452847054849,
+    389452870123520,
+    389452872220672,
+    389452891095040,
+    389452893192192,
+    389452916260864,
+    389452916260865,
+    389452941426688,
+    389452941426689,
+    389783018471424,
+    389783018471425,
+    390752654327808,
+    390752811614208,
+    390752826294272,
+    390752832585728,
+    390752838877184,
+    390752874528768,
+    391024816422912,
+    391093070331904,
+    391093760294912,
+    393308695166976,
+    393308697264128,
+    393431879974912,
+    393976074010624,
+    393976074010625,
+    395019652235264,
+    395911726104576,
+    395911726104577,
+    395919204548608,
+    395964905684992,
+    395964905684993,
+    395964907782144,
+    398093206552576
+   ]
+  },
+  "member": {
+   "role": {
+    "name": "member",
+    "title": "{{t(\"Member\")}}",
+    "default": true,
+    "hidden": false,
+    "allowConfigure": null,
+    "allowNewMenu": true,
+    "snippets": [
+     "!app",
+     "!pm.*",
+     "!ui.*",
+     "pm"
+    ],
+    "strategy": {
+     "actions": [
+      "view"
+     ]
+    }
+   },
+   "dataSourceStrategy": {
+    "actions": [
+     "view"
+    ]
+   },
+   "resources": [
+    {
+     "name": "employeeShifts",
+     "usingActionsConfig": true,
+     "actions": [
+      {
+       "name": "view",
+       "fields": [
+        "calendarTitle",
+        "createdAt",
+        "createdBy",
+        "endTime",
+        "id",
+        "notes",
+        "shiftDate",
+        "shiftType",
+        "staff",
+        "staffId",
+        "startTime",
+        "status",
+        "updatedAt",
+        "updatedBy"
+       ],
+       "scopeId": null
+      }
+     ]
+    },
+    {
+     "name": "users",
+     "usingActionsConfig": true,
+     "actions": []
+    },
+    {
+     "name": "customerNotes",
+     "usingActionsConfig": true,
+     "actions": []
+    }
+   ],
+   "desktopRoutes": [
+    388680870985728,
+    388680873082880,
+    388680873082881,
+    388681007300608,
+    388681009397760,
+    388681338650624,
+    388681340747776,
+    388682043293696,
+    388682043293697,
+    388682141859840,
+    388682143956992,
+    388682452238336,
+    388682452238337,
+    388682764713984,
+    388682764713985,
+    388683081383936,
+    388683081383937,
+    388683393859584,
+    388683393859585,
+    388683710529536,
+    388683710529537,
+    389452714934272,
+    389452752683008,
+    389452752683009,
+    389452777848832,
+    389452777848833,
+    389452800917504,
+    389452800917505,
+    389452823986176,
+    389452823986177,
+    389452847054848,
+    389452847054849,
+    389452870123520,
+    389452872220672,
+    389452891095040,
+    389452893192192,
+    389452916260864,
+    389452916260865,
+    389452941426688,
+    389452941426689,
+    389783018471424,
+    389783018471425,
+    390752654327808,
+    390752811614208,
+    390752826294272,
+    390752832585728,
+    390752838877184,
+    390752874528768,
+    391093070331904,
+    391093760294912,
+    393308695166976,
+    393308697264128,
+    393431879974912,
+    393976074010624,
+    393976074010625,
+    395019652235264,
+    398510996979712,
+    398510999076864,
+    398511156363264,
+    398511393341440,
+    398693152522240
+   ]
+  },
+  "receptionist": {
+   "role": {
+    "name": "receptionist",
+    "title": "Receptionist",
+    "default": false,
+    "hidden": false,
+    "allowConfigure": false,
+    "allowNewMenu": false,
+    "snippets": [
+     "!pm",
+     "!pm.*",
+     "!ui.*"
+    ],
+    "strategy": null
+   },
+   "dataSourceStrategy": null,
+   "resources": [],
+   "desktopRoutes": []
+  },
+  "staff": {
+   "role": {
+    "name": "staff",
+    "title": "Staff",
+    "default": false,
+    "hidden": false,
+    "allowConfigure": false,
+    "allowNewMenu": false,
+    "snippets": [
+     "!pm",
+     "!pm.*",
+     "!ui.*"
+    ],
+    "strategy": null
+   },
+   "dataSourceStrategy": null,
+   "resources": [],
+   "desktopRoutes": []
+  }
+ },
+ "scopes": [
+  {
+   "id": 386671121268736,
+   "createdAt": "2026-09-14T16:25:58.446Z",
+   "updatedAt": "2026-09-14T16:25:58.446Z",
+   "key": "all",
+   "dataSourceKey": "main",
+   "name": "{{t(\"All records\")}}",
+   "resourceName": null,
+   "scope": {}
+  },
+  {
+   "id": 386671121268737,
+   "createdAt": "2026-09-14T16:25:58.521Z",
+   "updatedAt": "2026-09-14T16:25:58.521Z",
+   "key": "own",
+   "dataSourceKey": "main",
+   "name": "{{t(\"Own records\")}}",
+   "resourceName": null,
+   "scope": {
+    "createdById": "{{ ctx.state.currentUser.id }}"
+   }
+  },
+  {
+   "id": 389459767656448,
+   "createdAt": "2026-09-30T01:48:08.980Z",
+   "updatedAt": "2026-10-07T22:13:48.272Z",
+   "key": "ikgnjw0cmji",
+   "dataSourceKey": "main",
+   "name": "Assigned to me (staff)",
+   "resourceName": "appointments",
+   "scope": {
+    "$and": [
+     {
+      "staffId": {
+       "$exists": true
+      }
+     },
+     {
+      "staffId": {
+       "$eq": "{{$user.staff.id}}"
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 389459792822272,
+   "createdAt": "2026-09-30T01:48:20.901Z",
+   "updatedAt": "2026-10-07T22:13:48.374Z",
+   "key": "4iszo66cyl8",
+   "dataSourceKey": "main",
+   "name": "Assigned to me (staff, via appointment)",
+   "resourceName": "payments",
+   "scope": {
+    "$and": [
+     {
+      "appointment": {
+       "staffId": {
+        "$exists": true
+       }
+      }
+     },
+     {
+      "appointment": {
+       "staffId": {
+        "$eq": "{{$user.staff.id}}"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": 391023314862080,
+   "createdAt": "2026-10-08T16:54:06.555Z",
+   "updatedAt": "2026-10-08T16:54:06.555Z",
+   "key": "cvo352o5lsv",
+   "dataSourceKey": "main",
+   "name": "Own notes (staff technician)",
+   "resourceName": "customerNotes",
+   "scope": {
+    "$and": [
+     {
+      "staffId": {
+       "$exists": true
+      }
+     },
+     {
+      "staffId": {
+       "$eq": "{{$user.staff.id}}"
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "userRoles": [
+  {
+   "id": 1,
+   "username": "Sandra Admin",
+   "roles": [
+    {
+     "name": "member",
+     "default": false
+    },
+    {
+     "name": "root",
+     "default": false
+    },
+    {
+     "name": "admin",
+     "default": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "username": "Pradeep",
+   "roles": [
+    {
+     "name": "member",
+     "default": false
+    },
+    {
+     "name": "admin",
+     "default": false
+    },
+    {
+     "name": "manager",
+     "default": false
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "username": "Bori",
+   "roles": [
+    {
+     "name": "member",
+     "default": false
+    },
+    {
+     "name": "admin",
+     "default": true
+    },
+    {
+     "name": "manager",
+     "default": false
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "username": "Carolyn",
+   "roles": [
+    {
+     "name": "manager",
+     "default": false
+    },
+    {
+     "name": "admin",
+     "default": true
+    },
+    {
+     "name": "member",
+     "default": false
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "username": "Chizalum",
+   "roles": [
+    {
+     "name": "manager",
+     "default": false
+    },
+    {
+     "name": "member",
+     "default": false
+    },
+    {
+     "name": "receptionist",
+     "default": false
+    },
+    {
+     "name": "staff",
+     "default": false
+    },
+    {
+     "name": "admin",
+     "default": true
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "username": "Sandra",
+   "roles": [
+    {
+     "name": "manager",
+     "default": false
+    },
+    {
+     "name": "member",
+     "default": false
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "username": "staff_test",
+   "roles": [
+    {
+     "name": "member",
+     "default": false
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "username": "receptionist_test",
+   "roles": [
+    {
+     "name": "member",
+     "default": false
+    }
+   ]
+  }
+ ]
+}
