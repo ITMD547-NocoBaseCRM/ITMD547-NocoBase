@@ -272,12 +272,12 @@ export class PluginCrmServer extends Plugin {
                 triggerFrom: 'appointmentConfirmation',
               });
               sendStatus = 'sent';
-              this.app.logger.info('[appointment-confirmation] sent to %s for customer %s', email, customerId);
+              this.app.logger.info('[appointment-confirmation] sent to ' + email + ' for customer ' + customerId);
             }
           } catch (sendErr: any) {
             sendError = sendErr?.reason || sendErr?.message || 'send failed';
             sendStatus = 'failed';
-            this.app.logger.error('[appointment-confirmation] send failed for customer %s: %s', customerId, sendError);
+            this.app.logger.error('[appointment-confirmation] send failed for customer ' + customerId + ': ' + sendError);
           }
 
           // Record in customerMessages for audit trail.
@@ -363,11 +363,11 @@ export class PluginCrmServer extends Plugin {
               triggerFrom: 'crmEmailSender',
             });
             await msgRepo.update({ filterByTk: id, values: { status: 'sent', sentAt: new Date(), error: null }, hooks: false });
-            this.app.logger.info('[email-sender] sent to %s (msg %s)', recipient, id);
+            this.app.logger.info('[email-sender] sent to ' + recipient + ' (msg ' + id + ')');
           } catch (err: any) {
             const reason = err?.reason || err?.message || 'unknown';
             await msgRepo.update({ filterByTk: id, values: { status: 'failed', error: reason }, hooks: false });
-            this.app.logger.error('[email-sender] failed for msg %s: %s', id, reason);
+            this.app.logger.error('[email-sender] failed for msg ' + id + ': ' + reason);
           }
         }
       } catch (err: any) {
@@ -552,12 +552,12 @@ export class PluginCrmServer extends Plugin {
                   triggerFrom: 'promoGameWin',
                 });
                 sendStatus = 'sent';
-                this.app.logger.info('[promo-play] win email sent to %s (game %s)', email, gameId);
+                this.app.logger.info('[promo-play] win email sent to ' + email + ' (game ' + gameId + ')');
               }
             } catch (sendErr: any) {
               sendError = sendErr?.reason || sendErr?.message || 'send failed';
               sendStatus = 'failed';
-              this.app.logger.error('[promo-play] win email failed for %s: %s', email, sendError);
+              this.app.logger.error('[promo-play] win email failed for ' + email + ': ' + sendError);
             }
             try {
               await this.db.getRepository('customerMessages').create({
