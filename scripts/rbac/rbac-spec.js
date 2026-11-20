@@ -68,7 +68,6 @@ const FINANCIAL = {
   fields: {
     appointments: ['payments'],
     appointmentServices: ['priceAtBooking'],
-    services: ['price'],
     customers: ['totalSpent', 'payments'],
     customerActivity: ['totalSpent', 'spentLast12m'],
     customerMemberships: ['payments'],
@@ -191,7 +190,8 @@ const ROLES = {
   staff: {
     title: 'Staff',
     // No revenue or financial information anywhere: no payments table; prices, amounts and spend totals are left out
-    // of every field list below (FINANCIAL). Staff Performance and My Workspace show nonfinancial metrics only.
+    // of every field list below (FINANCIAL; service list prices stay visible). Staff Performance and My Workspace show
+    // nonfinancial metrics only. No Dashboard (salon-wide view): My Workspace is the Staff home page.
     noFinancial: true,
     strategy: [],
     snippets: ['!pm', '!ui.*', '!app'],
@@ -213,7 +213,7 @@ const ROLES = {
         a('update', { scope: 'Own notes (staff technician)', fields: ['note'] }),
       ],
       employeeShifts: [a('view', { scope: 'RBAC staff: own shifts' })],
-      staff: [a('view', { scope: 'RBAC staff: own staff record', fields: [...STAFF_PUBLIC, 'email', 'phone', 'shifts'] })],
+      staff: [a('view', { scope: 'RBAC staff: own staff record', fields: [...STAFF_PUBLIC, 'shifts'] })], // no employee email/phone (related records, e.g. services → staff, are not scoped)
       services: [a('view', { scope: 'RBAC staff: services I perform' })],
       serviceCategories: many(['view']),
       staffServices: [a('view', { scope: 'RBAC staff: own service links' })],
@@ -227,7 +227,6 @@ const ROLES = {
     menus: {
       include: [
         ['Beauty Within Portal', 'My Workspace'],
-        ['Beauty Within Portal', 'Dashboard'],
         ['Beauty Within Portal', 'Appointments'],
         ['Beauty Within Portal', 'Shifts'],
         ['Beauty Within Portal', 'Customers', 'Customers List'],

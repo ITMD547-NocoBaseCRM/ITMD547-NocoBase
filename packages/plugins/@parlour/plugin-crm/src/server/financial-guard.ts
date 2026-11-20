@@ -1,7 +1,8 @@
 /**
  * RBAC: financial data.
  *
- * Staff (and Member) must not see revenue or any other financial information, whatever the request: lists, single
+ * Staff (and Member) must not see revenue or any other financial information (service list prices are not
+ * restricted), whatever the request: lists, single
  * records, related records (`appends`, association resources such as `customers/1/payments`), aggregate `:query`
  * requests (statistics), filters and sorts that could be used to infer amounts, exports and writes.
  *
@@ -22,7 +23,6 @@ export const FINANCIAL = {
   fields: {
     appointments: ['payments'],
     appointmentServices: ['priceAtBooking'],
-    services: ['price'],
     customers: ['totalSpent', 'payments'],
     customerActivity: ['totalSpent', 'spentLast12m'],
     customerMemberships: ['payments'],

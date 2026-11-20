@@ -26,11 +26,11 @@ selected in the avatar menu, or their default role. Permissions are never merged
 
 | Module | Admin | Manager | Member | Receptionist | Staff |
 |---|---|---|---|---|---|
-| Dashboard | Full | Full | – | View | Own appointments, no earnings |
+| Dashboard | Full | Full | – | View | – (My Workspace instead) |
 | Customers | Full | Full | – | Create / view / edit (no delete, no spend totals) | Customers of own appointments, service fields only |
 | Appointments | Full | Full | – | Create / view / edit / reschedule / cancel (no delete) | Own: view; edit status & notes; book for themselves |
 | Booked services | Full | Full | – | Manage lines of an appointment | Own, view (no booked price) |
-| Services & categories | Full | Manage | – | View | Services they perform, view (no price) |
+| Services & categories | Full | Manage | – | View | Services they perform, view (list prices visible) |
 | Memberships (plans, benefits) | Full | Manage | – | View | – |
 | Customer memberships | Full | Manage | – | Create / view / edit | – |
 | Payments | Full | Manage | – | – | – (no financial data at all, see §17) |
@@ -102,7 +102,7 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Role | Hidden / read-only |
 |---|---|
 | Receptionist | Customers: `totalSpent`, payments hidden; consent flags readable but changed only through consent events; staff email/phone hidden; no payment data anywhere (removed from related records too). |
-| Staff | Customers: only name, phone, status, skin profile/sensitivities, visit counts. No email, address, date of birth, notes, consent, spend. No financial data anywhere (§17). Appointments: may change only `status` and `notes`. |
+| Staff | Employees: names, role, specialty only – no email or phone, on their own record or on related records (services, appointments). Customers: only name, phone, status, skin profile/sensitivities, visit counts. No email, address, date of birth, notes, consent, spend. No financial data anywhere (§17). Appointments: may change only `status` and `notes`. |
 | Manager | Users: no password, reset token or roles. |
 | Member | Nothing. |
 
@@ -113,7 +113,7 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Admin | unchanged (all pages and settings) |
 | Manager | Beauty Within Portal: Dashboard, Customers (List, Customer Notes, Customer Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Messages (Send, History, Appointment Reminder tabs), Statistics (all tabs). The standalone Customer Notes, Message History and Reminder Settings pages stay hidden (they duplicate those tabs). Settings centre: only **Appointment availability, Staff Access and Mobile** (see below). |
 | Receptionist | Dashboard, Customers (List, Customer Notes, Customer Reviews), Appointments, Shifts, Services, Memberships (+ hidden detail pages they link to) |
-| Staff | Dashboard, **My Workspace** (see employee-onboarding.md), Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
+| Staff | **My Workspace** (see employee-onboarding.md; no Dashboard), Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
 | Member | **Access Pending** page only (top-level). Own profile, language and sign-out stay in the avatar menu. |
 
 Typing a URL for a page that isn't granted shows 404, and its data API answers 403. Settings URLs still draw the
@@ -270,13 +270,12 @@ enforce this; the pages only follow what the server allows.
 
 **What counts as financial** (`FINANCIAL` in `scripts/rbac/rbac-spec.js`, identical to
 `packages/plugins/@parlour/plugin-crm/src/server/financial-guard.ts`; a static test checks they match):
-the `payments` table; `appointments.payments`; `appointmentServices.priceAtBooking` (appointment revenue);
-`services.price`; `customers.totalSpent` and `customers.payments`; `customerActivity.totalSpent` and `spentLast12m`;
+the `payments` table; `appointments.payments`; `appointmentServices.priceAtBooking` (appointment revenue); `customers.totalSpent` and `customers.payments`; `customerActivity.totalSpent` and `spentLast12m`;
 `customerMemberships.payments`; `memberships.monthlyPrice`.
 
 **Layer 1 – role permissions.** The Staff role has no access to `payments` (the old "own appointments, amounts
 only" access was removed). Every Staff field list (`noFinancial: true`) drops the fields above and every related path
-through them (`appointmentServices.service.price`, `customer.totalSpent`, `payments.amount` …), so NocoBase's own
+through them (`appointmentServices.priceAtBooking`, `customer.totalSpent`, `payments.amount` …), so NocoBase's own
 field and aggregate (`:query`) checks already leave them out.
 
 **Layer 2 – financial guard** (CRM plugin, runs on every collection request after the ACL). For Staff, Member and
@@ -305,9 +304,10 @@ unchanged):
 - *Statistics → Staff Performance*: for roles without financial access the page doesn't request payments. It shows
   completed appointments, completion rate, cancellations/no-shows, most booked service, appointments per technician,
   skill demand and review scores, with no revenue cards or "Revenue per technician" section.
-- *Dashboard*: the Expected / Current earnings cards and per-appointment amounts are shown only to roles with
-  financial access.
-- *Services → Service List*: the price column is empty for Staff (the server returns no prices).
+- *Dashboard*: not in the Staff menu (My Workspace is their home page). For other roles, the Expected / Current
+  earnings cards and per-appointment amounts are shown only to roles with financial access.
+- *Services → Service List*: list prices are visible to Staff (catalog prices are not treated as financial data;
+  booked prices on appointments are).
 
 **Verified** by `scripts/rbac/verify-rbac.js` (Staff: workspace, appointment details, customer records, service
 views, Staff Performance and statistics aggregates, direct API requests, related collection queries, association

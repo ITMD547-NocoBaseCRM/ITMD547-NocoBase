@@ -40,9 +40,9 @@ async function verifyRbac(as, ctx) {
   });
 
   // ---------- Staff: no financial data (backend, every channel) ----------
-  // A response "leaks" when it contains any money key anywhere (amount, price, priceAtBooking, totalSpent,
+  // A response "leaks" when it contains any money key anywhere (amount, priceAtBooking, totalSpent,
   // spentLast12m, monthlyPrice, revenue, payments …).
-  const MONEY = /"(amount|price|priceAtBooking|totalSpent|spentLast12m|monthlyPrice|revenue|earnings|sales|payments|discountValue)"\s*:/;
+  const MONEY = /"(amount|priceAtBooking|totalSpent|spentLast12m|monthlyPrice|revenue|earnings|sales|payments|discountValue)"\s*:/;
   const noMoney = (r) => !MONEY.test(JSON.stringify((r.json && r.json.data) ?? r.json ?? {}));
   const okNoMoney = (r) => r.ok && noMoney(r);
   const deniedOrNoMoney = (r) => denied(r) || okNoMoney(r);
@@ -69,8 +69,9 @@ async function verifyRbac(as, ctx) {
     await probe(S, 'appointments: sort by booked price refused', 'appointments:list?sort=-appointmentServices.priceAtBooking', 'deny');
     await probe(S, 'appointments: export refused', 'appointments:export', 'deny', { method: 'POST', body: { columns: [{ dataIndex: ['appointmentServices', 'priceAtBooking'] }] } });
     // Service views
-    await probe(S, 'services: list has no prices', 'services:list?pageSize=50', okNoMoney);
-    await probe(S, 'services: price field dropped', 'services:list?pageSize=50&fields[]=id&fields[]=name&fields[]=price', okNoMoney);
+    await probe(S, 'services: list prices visible (allowed)', 'services:list?pageSize=50', (r) => r.ok && rows(r).length > 0 && rows(r).every((x) => 'price' in x));
+    await probe(S, 'services: related employees show no email/phone', 'services:list?pageSize=50&appends[]=staff', (r) => r.ok && rows(r).every((x) => (x.staff || []).every((st) => !('email' in st) && !('phone' in st))));
+    await probe(S, 'appointments: related employee shows no email/phone', 'appointments:list?pageSize=20&appends[]=staff', (r) => r.ok && rows(r).every((x) => !x.staff || (!('email' in x.staff) && !('phone' in x.staff))));
     await probe(S, 'service lines: no booked prices', 'appointmentServices:list?pageSize=50&appends[]=service', okNoMoney);
     await probe(S, 'service lines: filter on booked price refused', `appointmentServices:list?filter=${q({ priceAtBooking: { $gte: 0 } })}`, 'deny');
     // Customer records
@@ -89,13 +90,14 @@ async function verifyRbac(as, ctx) {
     await probe(S, 'statistics: skill demand counts allowed', 'appointmentServices:query', (r) => r.ok, { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['serviceId'], alias: 'serviceId' }] } });
     await probe(S, 'statistics: revenue sum refused', 'appointmentServices:query', 'deny', { method: 'POST', body: { measures: [{ field: ['priceAtBooking'], aggregation: 'sum', alias: 'revenue' }] } });
     await probe(S, 'statistics: revenue per technician refused', 'appointments:query', 'deny', { method: 'POST', body: { measures: [{ field: ['payments', 'amount'], aggregation: 'sum', alias: 'revenue' }], dimensions: [{ field: ['staffId'], alias: 'staffId' }] } });
-    await probe(S, 'statistics: grouping by price refused', 'services:query', 'deny', { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['price'], alias: 'price' }] } });
+    await probe(S, 'statistics: grouping by booked price refused', 'appointmentServices:query', 'deny', { method: 'POST', body: { measures: [{ field: ['id'], aggregation: 'count', alias: 'n' }], dimensions: [{ field: ['priceAtBooking'], alias: 'price' }] } });
     await probe(S, 'statistics: customer spend sum refused', 'customers:query', 'deny', { method: 'POST', body: { measures: [{ field: ['totalSpent'], aggregation: 'sum', alias: 'spend' }] } });
     // Writes never set money
     await probe(S, 'writes: cannot change service prices', 'services:update?filterByTk=1', 'deny', { method: 'POST', body: { price: 1 } });
   }
 
   // ---------- Staff (staff_test, linked to Grace Kim) ----------
+  await probe('staff', 'menu has no Dashboard', 'desktopRoutes:listAccessible?tree=true', (r) => r.ok && !JSON.stringify(r.json.data || []).includes('"title":"Dashboard"'));
   const sAppts = await probe('staff', 'lists appointments', 'appointments:list?pageSize=500', 'allow');
   rec('staff', 'sees only own appointments', rows(sAppts).length > 0 && rows(sAppts).every((a) => String(a.staffId) === String(graceStaffId)), `${rows(sAppts).length} rows`);
   await probe('staff', "cannot open another technician's appointment by id", `appointments:get?filterByTk=${otherAppointmentId}`, (r) => denied(r) || !(r.json && r.json.data));

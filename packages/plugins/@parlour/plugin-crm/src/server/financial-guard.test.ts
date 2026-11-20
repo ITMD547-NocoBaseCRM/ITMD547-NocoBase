@@ -68,7 +68,8 @@ test('filters, sorts, aggregates and export columns on financial fields are refu
   assert.ok(checkRequest(db, 'appointmentServices', 'query', { values: { measures: [{ field: ['priceAtBooking'], aggregation: 'sum' }] } }));
   assert.ok(checkRequest(db, 'appointments', 'query', { values: { dimensions: [{ field: ['payments', 'amount'] }] } }));
   assert.ok(checkRequest(db, 'appointments', 'query', { values: { orders: [{ field: ['appointmentServices', 'priceAtBooking'] }] } }));
-  assert.ok(checkRequest(db, 'services', 'export', { values: { columns: [{ dataIndex: ['price'] }] } }));
+  assert.ok(checkRequest(db, 'customers', 'export', { values: { columns: [{ dataIndex: ['totalSpent'] }] } }));
+  assert.equal(checkRequest(db, 'services', 'list', { sort: ['-price'], filter: { price: { $gt: 10 } } }), null); // list prices are allowed
   assert.ok(checkRequest(db, 'customers', 'list', { filter: { activity: { spentLast12m: { $gt: 100 } } } }));
 });
 
@@ -85,7 +86,7 @@ test('nonfinancial requests pass unchanged', () => {
 test('financial fields and appends are dropped from read selections', () => {
   const params: any = { fields: ['id', 'priceAtBooking', 'service.price', 'service.name'], appends: ['service', 'appointment.payments'], except: ['priceAtBooking'] };
   assert.equal(checkRequest(db, 'appointmentServices', 'list', params), null);
-  assert.deepEqual(params.fields, ['id', 'service.name']);
+  assert.deepEqual(params.fields, ['id', 'service.price', 'service.name']);
   assert.deepEqual(params.appends, ['service']);
   assert.deepEqual(params.except, []);
 });
@@ -114,12 +115,13 @@ test('responses lose financial fields at any depth', () => {
   };
   const out = stripFinancial(db, 'appointments', body);
   assert.deepEqual(out, {
-    rows: [{ id: 1, status: 'completed', customer: { id: 2, firstName: 'A', activity: { id: 2, totalVisits: 4 } }, appointmentServices: [{ id: 3, service: { id: 4, name: 'Facial' } }] }],
+    rows: [{ id: 1, status: 'completed', customer: { id: 2, firstName: 'A', activity: { id: 2, totalVisits: 4 } }, appointmentServices: [{ id: 3, service: { id: 4, name: 'Facial', price: 60 } }] }],
     count: 1,
   });
-  assert.equal(JSON.stringify(out).match(/amount|price|totalSpent|spent/i), null);
+  assert.equal(JSON.stringify(out).match(/amount|priceAtBooking|totalSpent|spent/i), null);
   assert.deepEqual(stripFinancial(db, 'payments', [{ id: 1, amount: 5 }]), []);
-  assert.deepEqual(stripFinancial(db, 'services', { id: 4, name: 'Facial', price: 60, toJSON() { return { id: 4, name: 'Facial', price: 60 }; } }), { id: 4, name: 'Facial' });
+  assert.deepEqual(stripFinancial(db, 'customers', { id: 4, firstName: 'A', totalSpent: 60, toJSON() { return { id: 4, firstName: 'A', totalSpent: 60 }; } }), { id: 4, firstName: 'A' });
+  assert.deepEqual(stripFinancial(db, 'services', [{ id: 4, name: 'Facial', price: 60 }]), [{ id: 4, name: 'Facial', price: 60 }]);
 });
 
 test('middleware: refuses, strips, and leaves Admin/Manager/Receptionist untouched', async () => {
@@ -132,9 +134,9 @@ test('middleware: refuses, strips, and leaves Admin/Manager/Receptionist untouch
     throw: (status: number, message: string) => { const e: any = new Error(message); e.status = status; throw e; },
     run: async function () { await guard(this, async () => { this.body = JSON.parse(JSON.stringify(result)); }); return this; },
   });
-  const svc = [{ id: 4, name: 'Facial', price: 60 }];
-  assert.deepEqual((await ctxFor('staff', 'services', 'list', {}, svc).run()).body, [{ id: 4, name: 'Facial' }]);
-  for (const role of ['admin', 'manager', 'receptionist']) assert.deepEqual((await ctxFor(role, 'services', 'list', {}, svc).run()).body, svc, role);
+  const cust = [{ id: 4, firstName: 'A', totalSpent: 60 }];
+  assert.deepEqual((await ctxFor('staff', 'customers', 'list', {}, cust).run()).body, [{ id: 4, firstName: 'A' }]);
+  for (const role of ['admin', 'manager', 'receptionist']) assert.deepEqual((await ctxFor(role, 'customers', 'list', {}, cust).run()).body, cust, role);
   await assert.rejects(ctxFor('staff', 'payments', 'list', {}, []).run(), (e: any) => e.status === 403);
   await assert.rejects(ctxFor('staff', 'appointmentServices', 'query', { values: { measures: [{ field: ['priceAtBooking'], aggregation: 'sum' }] } }, []).run(), (e: any) => e.status === 403);
   await assert.doesNotReject(ctxFor('manager', 'payments', 'query', { values: { measures: [{ field: ['amount'], aggregation: 'sum' }] } }, []).run());
