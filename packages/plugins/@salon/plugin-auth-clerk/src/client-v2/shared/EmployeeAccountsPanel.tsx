@@ -34,6 +34,7 @@ const JOB_TITLES = [
 ];
 const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', receptionist: 'Receptionist', staff: 'Staff' };
 const defaultRole = (jobTitle: any) => (jobTitle === 'receptionist' ? 'receptionist' : jobTitle === 'manager' ? 'manager' : 'staff');
+const pickRole = (role: string, assignable: string[]) => (assignable.includes(role) ? role : 'staff');
 const fmt = (v: any) => {
   if (!v) return '';
   const d = new Date(v);
@@ -59,7 +60,7 @@ export function EmployeeAccountsPanel({ api }: { api: ApiClientLike }) {
     try {
       const res = await call('list');
       const body = res?.data || {};
-      setState({ loading: false, rows: body.data || [], canManage: !!(body.meta && body.meta.canManageAccounts), error: null });
+      setState({ loading: false, rows: body.data || [], canManage: !!(body.meta && body.meta.canManageAccounts), assignable: (body.meta && body.meta.assignableRoles) || ['staff', 'receptionist'], error: null });
     } catch (e) {
       setState({ loading: false, rows: [], canManage: false, error: e?.response?.status === 403 ? 'You do not have access to employee accounts.' : errText(e) });
     }
@@ -85,7 +86,7 @@ export function EmployeeAccountsPanel({ api }: { api: ApiClientLike }) {
   };
 
   const openInvite = async (row, mode = 'invite') => {
-    setInvite({ row, role: row.crmRoles.find((r) => r !== 'admin') || defaultRole(row.jobTitle), mode, userId: null, sendInvite: true });
+    setInvite({ row, role: pickRole(row.crmRoles.find((r: any) => r !== 'admin') || defaultRole(row.jobTitle), state.assignable || []), mode, userId: null, sendInvite: true });
     if (mode === 'link') {
       try {
         const res = await call('candidates');
@@ -229,7 +230,7 @@ export function EmployeeAccountsPanel({ api }: { api: ApiClientLike }) {
             Space,
             { direction: 'vertical', style: { width: '100%' } },
             h(Typography.Text, null, 'CRM role'),
-            h(Select, { value: invite.role, options: ROLES, style: { width: '100%' }, onChange: (role) => setInvite({ ...invite, role }) }),
+            h(Select, { value: invite.role, options: ROLES.filter((r) => (state.assignable || []).includes(r.value)), style: { width: '100%' }, onChange: (role) => setInvite({ ...invite, role }) }),
             invite.mode === 'link'
               ? h(
                   React.Fragment,
@@ -310,9 +311,9 @@ export function EmployeeAccountsPanel({ api }: { api: ApiClientLike }) {
             h(Form.Item, { name: 'lastName', label: 'Last name', rules: [{ required: true }] }, h(Input)),
             h(Form.Item, { name: 'email', label: 'Email (the invitation goes here)', rules: [{ required: true, type: 'email' }] }, h(Input)),
             h(Form.Item, { name: 'phone', label: 'Phone' }, h(Input)),
-            h(Form.Item, { name: 'role', label: 'Job title' }, h(Select, { options: JOB_TITLES, onChange: (v) => form.setFieldsValue({ crmRole: defaultRole(v) }) })),
+            h(Form.Item, { name: 'role', label: 'Job title' }, h(Select, { options: JOB_TITLES, onChange: (v: any) => form.setFieldsValue({ crmRole: pickRole(defaultRole(v), state.assignable || []) }) })),
             h(Form.Item, { name: 'specialty', label: 'Specialty' }, h(Input.TextArea, { rows: 2 })),
-            h(Form.Item, { name: 'crmRole', label: 'CRM role', rules: [{ required: true }] }, h(Select, { options: ROLES })),
+            h(Form.Item, { name: 'crmRole', label: 'CRM role', rules: [{ required: true }] }, h(Select, { options: ROLES.filter((r) => (state.assignable || []).includes(r.value)) })),
           ),
           h(Typography.Text, { type: 'secondary' }, 'Services performed can be added on the employee record afterwards.'),
         )

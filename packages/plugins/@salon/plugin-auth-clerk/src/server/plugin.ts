@@ -27,6 +27,7 @@ import staffLinksCollection from './schema/clerk-staff-links';
 import { StaffAccess } from './staff-access';
 import { EmployeeAccounts, ACCOUNTS as EMPLOYEE_ACCOUNTS, EVENTS as EMPLOYEE_ACCOUNT_EVENTS } from './employee-accounts';
 import { employeeAccountsCollection, employeeAccountEventsCollection } from './schema/employee-accounts';
+import { delegatedAccessGuard } from './delegated-access-guard';
 import {
   employeeOnboardingActions,
   ONBOARDING_ADMIN_ACTIONS,
@@ -233,6 +234,8 @@ export class PluginAuthClerkServer extends Plugin {
       },
       { tag: 'employee-onboarding-guard', before: 'allow-manager' },
     );
+    // Non-admins with Staff Access (Manager) may only manage ordinary staff accounts.
+    this.app.acl.use(delegatedAccessGuard(this.db), { tag: 'auth-clerk-delegation', before: 'allow-manager' });
     this.db.on(`${linksCollection}.afterCreate`, async (link: any) => {
       try {
         await this.employeeAccounts.onClerkLinked(link.get('userId'));

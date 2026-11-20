@@ -128,8 +128,18 @@ async function verifyRbac(as, ctx) {
     ['cannot create user accounts', 'users:create', { method: 'POST', body: { username: 'rbac_probe', password: 'Probe!12345678' } }],
     ['cannot change system settings', 'systemSettings:update?filterByTk=1', { method: 'POST', body: {} }],
     ['cannot create collections', 'collections:create', { method: 'POST', body: { name: 'rbac_probe' } }],
-    ['cannot manage Clerk staff links', 'clerkStaffLinks:list?pageSize=1'],
   ]) await probe('manager', name, action, expect || 'deny', opts);
+  // Staff Access is delegated for staff accounts only (Clerk plugin delegated-access guard). The probes use a
+  // nonexistent staff record, so nothing is created even if a guard were missing.
+  const adminUserId = ctx.adminUserId || 2;
+  await probe('manager', 'opens Staff Access (lists Clerk staff links)', 'clerkStaffLinks:list?pageSize=1', 'allow');
+  await probe('manager', 'cannot link an Admin user', 'clerkStaffLinks:create', 'deny', { method: 'POST', body: { userId: adminUserId, staffId: 0, clerkUserId: 'user_rbac_probe' } });
+  await probe('manager', 'cannot give the Manager role', 'employeeOnboarding:provision', 'deny', { method: 'POST', body: { staffId: 0, role: 'manager' } });
+  await probe('manager', 'settings show only Appointment availability, Staff Access, Mobile', 'roles:check', (r) => {
+    const s = (r.json && r.json.data && r.json.data.snippets) || [];
+    return r.ok && ['!pm.workflow', '!pm.users-permissions', '!pm.data-source-manager', '!pm.api-keys', '!pm.system-settings', '!pm.plugin-manager']
+      .every((x) => s.includes(x)) && !['!pm.auth-clerk', '!pm.mobile', '!pm.appointment-availability'].some((x) => s.includes(x));
+  });
 
   // ---------- Admin (current admin session) ----------
   for (const res of ['workflows', 'roles', 'users', 'apiKeys', 'customers', 'payments']) await probe('admin', `lists ${res}`, `${res}:list?pageSize=1`, 'allow');

@@ -1,6 +1,7 @@
 import type { Context, Next } from '@nocobase/actions';
 import { ClerkAuthError } from '../errors';
 import { EmployeeAccounts, OnboardingError } from '../employee-accounts';
+import { assignableRolesFor } from '../delegated-access-guard';
 
 export const ONBOARDING_RESOURCE = 'employeeOnboarding';
 /** Manager (anyone who may edit employees) may read status and request provisioning. Everything else is Admin. */
@@ -22,7 +23,10 @@ export function employeeOnboardingActions(get: () => EmployeeAccounts, canAdmin:
     await next();
   };
   return {
-    list: run(async (ctx) => ({ rows: await get().list(), canManageAccounts: canAdmin(ctx) })),
+    list: run(async (ctx: any) => {
+      const roles: string[] = ctx.state.currentRoles?.length ? ctx.state.currentRoles : [ctx.state.currentRole].filter(Boolean);
+      return { rows: await get().list(), canManageAccounts: canAdmin(ctx), assignableRoles: assignableRolesFor(roles) };
+    }),
     requestProvisioning: run((_c, v, a) => get().requestProvisioning(v.staffId, a, v.note)),
     candidates: run(() => get().candidates()),
     events: run((_c, v) => get().events(v.staffId)),

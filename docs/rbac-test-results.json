@@ -1,5 +1,6 @@
 {
- "ranAt": "2026-11-20T06:00:34.766Z",
+ "ranAt": "2026-11-20T18:49:02.719Z",
+ "note": "manager/member probes ran with an account holding those roles (rbac_manager/rbac_member no longer exist)",
  "results": [
   {
    "role": "member",
@@ -203,7 +204,7 @@
    "role": "staff",
    "name": "sees only own appointments",
    "pass": true,
-   "detail": "97 rows"
+   "detail": "98 rows"
   },
   {
    "role": "staff",
@@ -269,7 +270,7 @@
    "role": "staff",
    "name": "sees only customers of own appointments",
    "pass": true,
-   "detail": "32 rows"
+   "detail": "33 rows"
   },
   {
    "role": "staff",
@@ -761,7 +762,7 @@
    "role": "manager",
    "name": "cannot assign roles to users",
    "pass": true,
-   "detail": "users/31/roles:add -> 403"
+   "detail": "users/undefined/roles:add -> 403"
   },
   {
    "role": "manager",
@@ -783,9 +784,27 @@
   },
   {
    "role": "manager",
-   "name": "cannot manage Clerk staff links",
+   "name": "opens Staff Access (lists Clerk staff links)",
    "pass": true,
-   "detail": "clerkStaffLinks:list -> 403"
+   "detail": "clerkStaffLinks:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "cannot link an Admin user",
+   "pass": true,
+   "detail": "clerkStaffLinks:create -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot give the Manager role",
+   "pass": true,
+   "detail": "employeeOnboarding:provision -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "settings show only Appointment availability, Staff Access, Mobile",
+   "pass": true,
+   "detail": "roles:check -> 200"
   },
   {
    "role": "admin",
@@ -852,84 +871,6 @@
    "name": "review link endpoint reachable without login (bad token refused by the handler)",
    "pass": true,
    "detail": "customerReviewLinks:inspect -> 200"
-  },
-  {
-   "role": "member",
-   "name": "cannot read employee accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:list -> 403"
-  },
-  {
-   "role": "member",
-   "name": "cannot provision itself",
-   "pass": true,
-   "detail": "employeeOnboarding:provision -> 403"
-  },
-  {
-   "role": "member",
-   "name": "no workspace",
-   "pass": true,
-   "detail": "staffWorkspace:get -> 403"
-  },
-  {
-   "role": "staff",
-   "name": "cannot read employee accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:list -> 403"
-  },
-  {
-   "role": "staff",
-   "name": "cannot self-promote",
-   "pass": true,
-   "detail": "employeeOnboarding:provision -> 403"
-  },
-  {
-   "role": "staff",
-   "name": "workspace shows only own employee",
-   "pass": true,
-   "detail": "staffWorkspace:get -> 200"
-  },
-  {
-   "role": "staff",
-   "name": "cannot change own employee link",
-   "pass": true,
-   "detail": "staff:update -> 403"
-  },
-  {
-   "role": "receptionist",
-   "name": "cannot read employee accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:list -> 403"
-  },
-  {
-   "role": "manager",
-   "name": "reads employee account status",
-   "pass": true,
-   "detail": "employeeOnboarding:list -> 200"
-  },
-  {
-   "role": "manager",
-   "name": "cannot disable accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:disable -> 403"
-  },
-  {
-   "role": "manager",
-   "name": "cannot unlink accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:unlink -> 403"
-  },
-  {
-   "role": "manager",
-   "name": "cannot read onboarding tables",
-   "pass": true,
-   "detail": "employeeAccountEvents:list -> 403"
-  },
-  {
-   "role": "admin",
-   "name": "reads employee accounts",
-   "pass": true,
-   "detail": "employeeOnboarding:list -> 200"
   }
  ]
 }

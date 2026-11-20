@@ -63,13 +63,41 @@ const a = (name, extra = {}) => ({ name, fields: [], ...extra });
 const many = (names, extra) => names.map((n) => a(n, extra));
 const ownViews = { customerSavedViews: [a('create'), a('view', { scope: 'RBAC: own saved views' }), a('update', { scope: 'RBAC: own saved views' }), a('destroy', { scope: 'RBAC: own saved views' })] };
 
+// Settings pages Manager must not see (exact snippet names the settings menus check: `pm.<page>` or the page's own
+// aclSnippet). Keep in sync when plugins add settings pages.
+const HIDDEN_SETTINGS = [
+  // Settings-menu keys (the client hides a page only for an exact "!<aclSnippet>")
+  'pm.plugin-manager', 'pm.data-source-manager', 'pm.users-permissions', 'pm.users', 'pm.acl.roles',
+  'pm.workflow', 'pm.workflow.workflows', 'pm.ai', 'pm.ai.employees', 'pm.ai.llm-services', 'pm.ai.mcp-settings', 'pm.ai.settings',
+  'pm.ai.ai-employees', 'pm.ai.ai-settings', 'pm.api-doc', 'pm.api-doc.documentation', 'pm.api-keys', 'pm.api-keys.configuration',
+  'pm.api-keys.index', 'pm.auth', 'pm.auth.authenticators', 'pm.backups', 'pm.backups.settings', 'pm.backup-restore', 'pm.environment',
+  'pm.environment-variables', 'pm.environment.index', 'pm.file-manager', 'pm.file-manager.index', 'pm.file-manager.storages',
+  'pm.license-settings', 'pm.logger', 'pm.logger.index', 'pm.logger.logger', 'pm.notification-manager', 'pm.notification',
+  'pm.notification.channels', 'pm.notification.logs', 'pm.routes', 'pm.desktopRoutes', 'pm.security', 'pm.security.token-policy',
+  'pm.system-settings', 'pm.system-settings.system-settings', 'pm.theme-editor', 'pm.theme-editor.themes', 'pm.ui-templates',
+  'pm.ui-templates.templates', 'pm.ui-schema-storage', 'pm.ui-schema-storage.block-templates', 'pm.verification',
+  'pm.verification.verifiers', 'pm.localization', 'pm.localization.localization', 'pm.locale-tester', 'pm.map', 'pm.map.configuration',
+  'pm.multi-app-manager', 'pm.multi-app-manager.applications', 'pm.departments', 'pm.public-forms', 'pm.user-data-sync',
+  // Wildcards: Manager includes 'pm.*' (needed so mergeRoleSnippets keeps the exact negations above), so every server
+  // snippet family other than the four allowed pages is denied as a whole, including ones a plugin adds later under these names.
+  'pm.plugin-manager*', 'pm.data-source-manager*', 'pm.users*', 'pm.acl*', 'pm.workflow*', 'pm.ai*', 'pm.api-doc*', 'pm.api-keys*',
+  'pm.auth.*', 'pm.authenticators*', 'pm.backup*', 'pm.environment*', 'pm.file-manager*', 'pm.license-settings*', 'pm.logger*',
+  'pm.notification*', 'pm.routes*', 'pm.desktopRoutes*', 'pm.security*', 'pm.system-settings*', 'pm.theme-editor*',
+  'pm.ui-templates*', 'pm.ui-schema-storage*', 'pm.verification*', 'pm.localization*', 'pm.locale-tester*', 'pm.map*',
+  'pm.multi-app-manager*', 'pm.departments*', 'pm.public-forms*', 'pm.user-data-sync*',
+].map((x) => `!${x}`);
+
 const ROLES = {
   manager: {
     title: 'Manager',
     strategy: [],
-    // Customer review moderation/invitations. No other settings pages: no workflow, plugins, data sources,
-    // API keys, variables, authentication, users & permissions, system settings, UI configuration.
-    snippets: ['pm.customer-reviews', '!pm', '!ui.*', '!app'],
+    // Settings pages: Customer reviews, Appointment availability, Staff Access (staff accounts only – Admin and Manager
+    // accounts and the Manager role stay with Admin, enforced by the Clerk plugin's delegated-access guard) and Mobile
+    // (mobile menu). No workflow, plugins, data sources, API keys, variables, authentication, users & permissions,
+    // system settings or UI configuration.
+    // The settings menu (both clients) hides a page only when the role explicitly denies its snippet, so every other
+    // settings page is listed in HIDDEN_SETTINGS. The server refuses their APIs regardless.
+    snippets: ['pm.*', 'pm.customer-reviews', 'pm.appointment-availability', 'pm.auth-clerk', 'pm.mobile', '!pm', '!ui.*', '!app', ...HIDDEN_SETTINGS],
     allowConfigure: false,
     allowNewMenu: false,
     collections: {
@@ -85,7 +113,7 @@ const ROLES = {
       communication_consent_events: many(['create', 'view', 'export']), // append-only (workflow guard)
       communication_suppressions: many(['create', 'view', 'update']), // never deleted (workflow guard)
       ...ownViews,
-      users: [a('view', { fields: [...USER_PUBLIC, 'email', 'staff', 'createdAt', 'updatedAt'] })],
+      users: [a('view', { fields: [...USER_PUBLIC, 'email', 'staff', 'roles', 'createdAt', 'updatedAt'] })], // roles: read-only, for Staff Access
       roles: [a('view', { fields: ['name', 'title', 'description'] })],
     },
     // The whole portal except standalone pages that duplicate a tab and were hidden before:

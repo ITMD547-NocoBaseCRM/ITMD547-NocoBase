@@ -111,7 +111,7 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Role | Menu |
 |---|---|
 | Admin | unchanged (all pages and settings) |
-| Manager | Beauty Within Portal: Dashboard, Customers (List, Customer Notes, Customer Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Messages (Send, History, Appointment Reminder tabs), Statistics (all tabs). The standalone Customer Notes, Message History and Reminder Settings pages stay hidden (they duplicate those tabs). No settings centre. |
+| Manager | Beauty Within Portal: Dashboard, Customers (List, Customer Notes, Customer Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Messages (Send, History, Appointment Reminder tabs), Statistics (all tabs). The standalone Customer Notes, Message History and Reminder Settings pages stay hidden (they duplicate those tabs). Settings centre: only **Appointment availability, Staff Access and Mobile** (see below). |
 | Receptionist | Dashboard, Customers (List, Customer Notes, Customer Reviews), Appointments, Shifts, Services, Memberships (+ hidden detail pages they link to) |
 | Staff | Dashboard, **My Workspace** (see employee-onboarding.md), Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
 | Member | **Access Pending** page only (top-level). Own profile, language and sign-out stay in the avatar menu. |
@@ -181,7 +181,7 @@ Workflow versions changed (old versions kept, disabled):
 | `docs/rbac-test-results.json` | live test results |
 | `scripts/rbac/rbac-spec.js` | the permission matrix as data |
 | `scripts/rbac/rbac-core.js` | idempotent applier (scopes, roles, collections, fields, menus, Access Pending page) |
-| `scripts/rbac/verify-rbac.js` | live API test suite (142 checks) |
+| `scripts/rbac/verify-rbac.js` | live API test suite (145 checks) |
 | `scripts/rbac/rbac.test.js` | static spec tests (`yarn test:rbac`) |
 | `scripts/apply-rbac.js`, `scripts/rollback-rbac.js` | `yarn apply:rbac [--check]`, `yarn rollback:rbac [--check]` |
 | `scripts/backups/rbac-before.json` | permissions and assignments before the change |
@@ -203,7 +203,7 @@ Workflow versions changed (old versions kept, disabled):
 ## 13. Tests executed
 
 - `yarn test:rbac` – 8 static checks of the spec (pass).
-- `scripts/rbac/verify-rbac.js` against the running app, signed in as each test account – **142/142 pass**
+- `scripts/rbac/verify-rbac.js` against the running app, signed in as each test account – **145/145 pass** (latest run: the `rbac_manager`/`rbac_member` accounts had been deleted, so the Manager and Member probes ran with an account holding those roles)
   (Member 32, Staff 38, Receptionist 31, Manager 30, Admin 8, public 3). Covers direct API access, create / read /
   update / delete, association queries, foreign record ids, filters, exports, custom plugin endpoints, statistics
   queries, related-record field trimming and the public review endpoint.
@@ -245,5 +245,20 @@ Workflow versions changed (old versions kept, disabled):
 - **Verify a Member-only account is restricted:** sign in with it – only *Access Pending* appears; or run
   `yarn apply:rbac --check` (no changes expected) and the live checks in `scripts/rbac/verify-rbac.js`.
 - **Clerk users:** Settings → Staff Access to invite/link; the account must hold Admin, Manager, Receptionist or Staff.
+
+## Manager settings pages
+
+Managers see three settings pages: **Appointment availability**, **Staff Access** and **Mobile** (Customer reviews stays
+reachable from Customers → Customer Reviews). The settings menu in both clients hides a page only when the role denies
+that page's exact snippet (`!pm.<name>`), and NocoBase drops such multi-part denials unless the role also includes
+`pm.*`. The Manager role therefore has `pm.*` plus an explicit denial (exact names and `pm.<family>*` wildcards) of every
+other settings snippet registered in this app; `scripts/rbac/rbac.test.js` checks with the server's own matching rule
+that only the four pages remain allowed. The legacy `/admin` client has no Appointment availability page and does not
+show its deprecated Mobile page to Managers; use `/v/admin/settings`.
+
+Staff Access is delegated for staff accounts only: the Clerk plugin's delegated-access guard
+(`delegated-access-guard.ts`) refuses non-admin callers who link, invite, provision, disable, reactivate or unlink a user
+holding root, admin or manager, or who give the Manager role. A plugin that adds a new settings page under a new name is
+allowed to Managers until it is added to `HIDDEN_SETTINGS` in `rbac-spec.js`, but its APIs keep their own ACL checks.
 - **Change permissions:** edit `scripts/rbac/rbac-spec.js`, then `yarn apply:rbac --check` and `yarn apply:rbac`.
   Changes made by hand in Roles & Permissions are reported (and reverted) by the next apply.

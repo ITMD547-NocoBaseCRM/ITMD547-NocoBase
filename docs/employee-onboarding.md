@@ -103,7 +103,7 @@ actions. Component: `packages/plugins/@salon/plugin-auth-clerk/src/client-v2/sha
 (used by both the legacy and the modern client).
 
 **Staff page**: a small block above the employee table. Admins see a pointer with an *Open Staff Access* button;
-Managers (who can't open Staff Access) see the read-only account status list with **Request account**.
+On the Staff page, Managers see the account status list with **Request account**. Managers can also open Settings → Staff Access for staff accounts (Staff and Receptionist roles); Admin and Manager accounts and giving the Manager role stay with Admins (delegated-access guard).
 
 - Admin: Add employee & invite · Invite to CRM · Link existing user · Resend invitation · Retry · Send invitation ·
   Disable (optionally "the employee has left" = offboard) · Reactivate · Unlink (reason required) · History.
