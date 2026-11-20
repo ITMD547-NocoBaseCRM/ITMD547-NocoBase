@@ -265,6 +265,34 @@ export class PluginAppointmentAvailabilityServer extends Plugin {
     }
   }
 
+  private async validateAppointmentService(model: any, options: any = {}) {
+    const values = model.get ? model.get() : model;
+    const isExisting = model.isNewRecord !== true && values.id != null;
+    const serviceLinkChanged = !isExisting || model.changed?.('appointmentId') || model.changed?.('serviceId');
+    if (!serviceLinkChanged || !values.appointmentId || !values.serviceId) return;
+
+    const appointment = await this.db.getRepository('appointments').findOne({
+      filterByTk: values.appointmentId,
+      fields: ['staffId', 'status'],
+      ...(options?.transaction ? { transaction: options.transaction } : {}),
+    });
+    if (!appointment) throw new AvailabilityError('The appointment could not be found while validating its service.');
+    const appointmentValues = appointment.get ? appointment.get() : appointment;
+    if (!appointmentValues.staffId || ['cancelled', 'noShow'].includes(appointmentValues.status)) return;
+
+    try {
+      await this.availability.assertStaffProvidesServices(
+        appointmentValues.staffId,
+        [values.serviceId],
+        options?.transaction,
+      );
+    } catch (error) {
+      if (error instanceof AvailabilityError) throw error;
+      this.app.logger.error('Appointment service eligibility validation failed', { error: error instanceof Error ? error.message : 'unknown error' });
+      throw new AvailabilityError('Service eligibility could not be verified. Please try again.');
+    }
+  }
+
   private normalizedShift(values: any, previous: any = {}) {
     const shift = { ...previous, ...values };
     if (Object.prototype.hasOwnProperty.call(values, 'staff')) {

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Spin to Win</title>
+<style>
+  :root { --brand: #d4621c; --ink: #111827; --muted: #6b7280; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: var(--ink); background: #fdf6f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .card { background: #fff; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); padding: 28px 24px; width: 100%; max-width: 430px; text-align: center; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+  .wheel-wrap { position: relative; width: 300px; height: 300px; margin: 0 auto 16px; }
+  .pointer { position: absolute; top: -4px; left: 50%; transform: translateX(-50%); z-index: 2; width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent; border-top: 20px solid var(--ink); }
+  #wheelG { transform-origin: 150px 150px; }
+  #wheelG.spinning { transition: transform 4.5s cubic-bezier(0.15, 0.85, 0.25, 1); }
+  input[type=email] { width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid #d9d9d9; border-radius: 8px; margin-bottom: 10px; }
+  button { width: 100%; padding: 13px; font-size: 17px; font-weight: 700; color: #fff; background: var(--brand); border: 0; border-radius: 8px; cursor: pointer; }
+  button:disabled { background: #e5a27a; cursor: not-allowed; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center; font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .result { margin-top: 16px; padding: 14px; border-radius: 10px; font-size: 16px; display: none; }
+  .result.win { background: #f6ffed; border: 1px solid #b7eb8f; }
+  .result.lose { background: #fafafa; border: 1px solid #e5e7eb; }
+  .result .big { font-size: 20px; font-weight: 800; }
+  .code { font-family: monospace; font-weight: 700; background: #fff2e8; padding: 3px 10px; border-radius: 6px; border: 1px dashed var(--brand); display: inline-block; margin-top: 6px; font-size: 18px; }
+  .err { color: #b91c1c; font-size: 14px; margin-top: 10px; display: none; }
+  .fine { color: var(--muted); font-size: 12px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">Spin to Win</h1>
+  <div class="sub" id="subtitle">Enter your email and spin the wheel for a surprise!</div>
+  <div id="game" style="display:none">
+    <div class="wheel-wrap">
+      <div class="pointer"></div>
+      <svg width="300" height="300" viewBox="0 0 300 300"><g id="wheelG"></g></svg>
+    </div>
+    <div class="legend" id="legend"></div>
+    <input type="email" id="email" placeholder="you@example.com" autocomplete="email" />
+    <button id="spinBtn">Spin the wheel</button>
+    <div class="err" id="err"></div>
+    <div class="result" id="result"></div>
+    <div class="fine">One spin per person. Prizes while stocks last.</div>
+  </div>
+  <div id="loading" class="sub">Loading…</div>
+</div>
+<script>
+(function () {
+  var API = '/api/';
+  var token = new URLSearchParams(window.location.search).get('token') || '';
+  var COLORS = ['#d4621c', '#0e7490', '#6d28d9', '#be185d', '#15803d', '#b45309', '#1d4ed8', '#b91c1c', '#0f766e', '#7c3aed'];
+  var segments = [];
+  var rotation = 0;
+  var spinning = false;
+
+  function el(id) { return document.getElementById(id); }
+  function polar(cx, cy, r, deg) { var rad = (deg - 90) * Math.PI / 180; return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)]; }
+  function segPath(cx, cy, r, a, b) {
+    var p1 = polar(cx, cy, r, a), p2 = polar(cx, cy, r, b);
+    return 'M ' + cx + ' ' + cy + ' L ' + p1[0] + ' ' + p1[1] + ' A ' + r + ' ' + r + ' 0 ' + (b - a > 180 ? 1 : 0) + ' 1 ' + p2[0] + ' ' + p2[1] + ' Z';
+  }
+  function colorOf(s, i) { return s.color || COLORS[i % COLORS.length]; }
+
+  function drawWheel() {
+    var g = el('wheelG'); var cx = 150, cy = 150, r = 144;
+    // Equal slices for every segment: the look is even, the actual draw stays weighted (server side).
+    var sweep = 360 / (segments.length || 1);
+    var html = '';
+    segments.forEach(function (s, i) {
+      var start = i * sweep, mid = start + sweep / 2;
+      s._mid = mid;
+      var lp = polar(cx, cy, r * 0.65, mid);
+      html += '<path d="' + segPath(cx, cy, r, start, start + sweep) + '" fill="' + colorOf(s, i) + '" stroke="#fff" stroke-width="2"></path>';
+      html += '<text x="' + lp[0] + '" y="' + lp[1] + '" fill="#fff" font-size="12" font-weight="600" text-anchor="middle" dominant-baseline="middle" transform="rotate(' + mid + ' ' + lp[0] + ' ' + lp[1] + ')">' + String(s.label || '').slice(0, 14).replace(/[<>&]/g, '') + '</text>';
+    });
+    html += '<circle cx="150" cy="150" r="26" fill="#fff" stroke="#e5e7eb" stroke-width="2"></circle><text x="150" y="150" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="#6b7280">SPIN</text>';
+    g.innerHTML = html;
+    var lg = '';
+    segments.forEach(function (s, i) {
+      lg += '<span><i style="background:' + colorOf(s, i) + '"></i>' + String(s.label || '').replace(/[<>&]/g, '') + '</span>';
+    });
+    el('legend').innerHTML = lg;
+  }
+
+  function showError(text) { var e = el('err'); e.textContent = text; e.style.display = 'block'; }
+  function hideError() { el('err').style.display = 'none'; }
+
+  function load() {
+    fetch(API + 'promoPlay:get?token=' + encodeURIComponent(token))
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        var data = json && json.data;
+        if (!data || !data.ok) { el('loading').textContent = (data && data.message) || 'This game link is not valid.'; return; }
+        segments = data.items || [];
+        el('title').textContent = data.name || 'Spin to Win';
+        el('loading').style.display = 'none';
+        el('game').style.display = 'block';
+        if (!segments.length) { el('spinBtn').disabled = true; showError('All prizes have been claimed. Thanks for playing!'); return; }
+        drawWheel();
+      })
+      .catch(function () { el('loading').textContent = 'Could not load the game. Please try again later.'; });
+  }
+
+  el('spinBtn').addEventListener('click', function () {
+    if (spinning) return;
+    hideError();
+    var email = el('email').value.trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { showError('Please enter a valid email address.'); return; }
+    spinning = true;
+    el('spinBtn').disabled = true;
+    el('spinBtn').textContent = 'Spinning…';
+    el('result').style.display = 'none';
+    fetch(API + 'promoPlay:spin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, email: email }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (json) {
+        var data = json && json.data;
+        if (!data || !data.ok) { finishIdle(); showError((data && data.message) || 'Something went wrong. Please try again.'); return; }
+        var winner = null;
+        segments.forEach(function (s) { if (String(s.id) === String(data.itemId)) winner = s; });
+        var mid = winner ? winner._mid : 0;
+        var target = rotation - (rotation % 360) + 6 * 360 + (360 - mid);
+        var g = el('wheelG');
+        g.classList.add('spinning');
+        g.style.transform = 'rotate(' + target + 'deg)';
+        rotation = target;
+        setTimeout(function () { showResult(data); }, 4700);
+      })
+      .catch(function () { finishIdle(); showError('Something went wrong. Please try again.'); });
+  });
+
+  function finishIdle() {
+    spinning = false;
+    el('spinBtn').disabled = false;
+    el('spinBtn').textContent = 'Spin the wheel';
+  }
+
+  function showResult(data) {
+    var r = el('result');
+    r.className = 'result ' + (data.won ? 'win' : 'lose');
+    var html = '';
+    if (data.won) {
+      html += '<div class="big">🎉 You won ' + String(data.label || '').replace(/[<>&]/g, '') + '!</div>';
+      if (data.couponCode) html += '<div>Your coupon code:</div><div class="code">' + String(data.couponCode).replace(/[<>&]/g, '') + '</div>';
+      html += '<div style="margin-top:8px;font-size:13px;color:#6b7280">We also emailed this to you. Show it at your next visit.</div>';
+    } else {
+      html += '<div class="big">' + String(data.label || 'Try again').replace(/[<>&]/g, '') + '</div>';
+      html += '<div style="margin-top:4px;font-size:13px;color:#6b7280">Better luck next time — we still love having you!</div>';
+    }
+    r.innerHTML = html;
+    r.style.display = 'block';
+    el('spinBtn').textContent = 'Thanks for playing!';
+  }
+
+  if (!token) { el('loading').textContent = 'This game link is missing its token.'; }
+  else load();
+})();
+</script>
+</body>
+</html>
