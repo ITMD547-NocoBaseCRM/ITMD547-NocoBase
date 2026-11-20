@@ -2,6 +2,8 @@ import PluginWorkflowServer from '@nocobase/plugin-workflow';
 import { Plugin } from '@nocobase/server';
 import {
   ACL_SNIPPET,
+  INVITATIONS_SNIPPET,
+  INVITATION_ACTIONS,
   ADMIN_RESOURCE,
   DELIVERIES,
   INSTRUCTION_TYPE,
@@ -176,12 +178,19 @@ export class PluginCustomerReviewsServer extends Plugin {
         listReviews: run((ctx) => this.reviews.listReviews({ ...ctx.action.params, ...values(ctx) })),
         moderate: run((ctx) => this.reviews.moderate(param(ctx, 'reviewId'), String(values(ctx).action || ''), values(ctx).reason, userId(ctx))),
         scores: run(async (ctx) => {
-          // Same audience as the rest of Staff Performance: whoever may list appointments.
+          // Managers (anyone who may moderate reviews) see every technician. A technician sees only their own
+          // scores: the staff record is looked up from the signed-in user on the server, whatever staffId was sent.
+          // Everyone else (Receptionist, Member, ...) is refused.
           const roles: string[] = ctx.state.currentRoles?.length ? ctx.state.currentRoles : [ctx.state.currentRole].filter(Boolean);
-          const allowed = roles.includes('root') || roles.some((role) => !!this.app.acl.can({ role, resource: 'appointments', action: 'list' }));
-          if (!allowed) ctx.throw(403, 'You do not have permission to view staff statistics.');
+          const acl: any = this.app.acl;
           const v = { ...ctx.action.params, ...values(ctx) };
-          return this.reviews.scores({ from: v.from, to: v.to, staffId: v.staffId });
+          const full = roles.includes('root') || roles.some((name) => acl.getRole(name)?.snippetAllowed(`${ADMIN_RESOURCE}:moderate`) === true);
+          if (full) return this.reviews.scores({ from: v.from, to: v.to, staffId: v.staffId });
+          const ownAccess = roles.some((role) => role === 'staff' && !!acl.can({ role, resource: 'appointments', action: 'list' }));
+          const uid = userId(ctx);
+          const own = ownAccess && uid != null ? await this.db.getRepository('staff').findOne({ filter: { userId: uid }, fields: ['id'] }) : null;
+          if (!own) ctx.throw(403, 'You do not have permission to view staff statistics.');
+          return this.reviews.scores({ from: v.from, to: v.to, staffId: String(own.get('id')) });
         }),
       },
     });
@@ -191,6 +200,10 @@ export class PluginCustomerReviewsServer extends Plugin {
     this.app.acl.registerSnippet({
       name: ACL_SNIPPET,
       actions: Object.keys(MANAGED_ACTIONS).map((resource) => `${resource}:*`),
+    });
+    this.app.acl.registerSnippet({
+      name: INVITATIONS_SNIPPET,
+      actions: INVITATION_ACTIONS.map((action) => `${ADMIN_RESOURCE}:${action}`),
     });
     this.app.acl.allow(PUBLIC_RESOURCE, ['inspect', 'submit'], 'public');
     this.app.acl.allow(ADMIN_RESOURCE, 'scores', 'loggedIn');

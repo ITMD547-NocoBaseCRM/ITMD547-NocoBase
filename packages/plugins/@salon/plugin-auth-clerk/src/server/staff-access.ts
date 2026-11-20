@@ -27,7 +27,7 @@ const denied = (code: string, message: string, reason?: string) => new ClerkAuth
  *
  *  1. an enabled `clerkStaffLinks` row for the Clerk user id (no email matching, no auto-linking),
  *  2. the linked NocoBase user still exists,
- *  3. the user holds at least one staff role (by default admin / r_staff / r_receptionist; the
+ *  3. the user holds at least one staff role (by default admin / manager / receptionist / staff; the
  *     default `member` role alone is not enough).
  *
  * Roles are only read, never written.

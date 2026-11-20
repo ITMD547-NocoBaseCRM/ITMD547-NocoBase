@@ -65,6 +65,9 @@
     "apply:customer-birthday": "node scripts/apply-customer-birthday.js",
     "apply:customer-reviews": "node scripts/apply-customer-reviews.js",
     "apply:appointment-date": "node scripts/apply-appointment-date.js",
+    "apply:rbac": "node scripts/apply-rbac.js",
+    "rollback:rbac": "node scripts/rollback-rbac.js",
+    "test:rbac": "node --test scripts/rbac/rbac.test.js",
     "test:appointment-date": "node --test scripts/appointment-date.test.js",
     "test:customer-reviews": "node --test --test-concurrency=1 scripts/customer-reviews.test.js packages/plugins/@salon/plugin-customer-reviews/src/server/__tests__/core.test.ts"
   },

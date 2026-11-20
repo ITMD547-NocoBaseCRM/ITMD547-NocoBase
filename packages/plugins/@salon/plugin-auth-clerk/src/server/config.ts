@@ -28,7 +28,9 @@ export type ClerkConfig = {
 
 export type ConfigResult = { ok: true; config: ClerkConfig } | { ok: false; problems: string[] };
 
-export const DEFAULT_ALLOWED_ROLES = ['admin', 'r_staff', 'r_receptionist'];
+// The CRM's business roles. Member (the default role for every account) is deliberately not here: a
+// Member-only account has no staff access and is refused at Clerk sign-in.
+export const DEFAULT_ALLOWED_ROLES = ['admin', 'manager', 'receptionist', 'staff'];
 
 /** `root` is the bootstrap superuser and always stays on the password fallback. */
 const NEVER_ALLOWED_ROLES = ['root'];

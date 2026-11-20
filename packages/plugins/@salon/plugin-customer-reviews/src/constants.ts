@@ -17,6 +17,9 @@ export const ADMIN_RESOURCE = 'customerReviewAdmin';
 
 /** ACL snippet that grants review management (admin and manager get it through `pm.*`). */
 export const ACL_SNIPPET = 'pm.customer-reviews';
+/** Front-desk subset: see review status and send/resend/regenerate invitations; no moderation, no revoke. */
+export const INVITATIONS_SNIPPET = 'pm.customer-reviews.invitations';
+export const INVITATION_ACTIONS = ['appointmentSummary', 'sendNow', 'resend', 'regenerate', 'manualLink', 'listReviews'];
 
 /** Workflow node type registered by this plugin. */
 export const INSTRUCTION_TYPE = 'customerReviewInvitations';

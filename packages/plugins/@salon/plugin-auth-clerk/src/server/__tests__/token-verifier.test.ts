@@ -113,8 +113,8 @@ describe('readClerkConfig', () => {
   });
 
   it('defaults to the salon staff roles and never allows root', () => {
-    expect(config().allowedRoles).toEqual(['admin', 'r_staff', 'r_receptionist']);
-    expect(config({ CLERK_ALLOWED_ROLES: 'root,r_staff' }).allowedRoles).toEqual(['r_staff']);
+    expect(config().allowedRoles).toEqual(['admin', 'manager', 'receptionist', 'staff']);
+    expect(config({ CLERK_ALLOWED_ROLES: 'root,staff' }).allowedRoles).toEqual(['staff']);
   });
 });
 
