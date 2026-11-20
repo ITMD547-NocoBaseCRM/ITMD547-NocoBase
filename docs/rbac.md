@@ -181,7 +181,7 @@ Workflow versions changed (old versions kept, disabled):
 | `docs/rbac-test-results.json` | live test results |
 | `scripts/rbac/rbac-spec.js` | the permission matrix as data |
 | `scripts/rbac/rbac-core.js` | idempotent applier (scopes, roles, collections, fields, menus, Access Pending page) |
-| `scripts/rbac/verify-rbac.js` | live API test suite (145 checks) |
+| `scripts/rbac/verify-rbac.js` | live API test suite (188 checks) |
 | `scripts/rbac/rbac.test.js` | static spec tests (`yarn test:rbac`) |
 | `scripts/apply-rbac.js`, `scripts/rollback-rbac.js` | `yarn apply:rbac [--check]`, `yarn rollback:rbac [--check]` |
 | `scripts/backups/rbac-before.json` | permissions and assignments before the change |
@@ -203,7 +203,7 @@ Workflow versions changed (old versions kept, disabled):
 ## 13. Tests executed
 
 - `yarn test:rbac` – 8 static checks of the spec (pass).
-- `scripts/rbac/verify-rbac.js` against the running app, signed in as each test account – **145/145 pass** (latest run: the `rbac_manager`/`rbac_member` accounts had been deleted, so the Manager and Member probes ran with an account holding those roles)
+- `scripts/rbac/verify-rbac.js` against the running app, signed in as each test account – **188/188 pass** (latest run: the `rbac_manager`/`rbac_member` accounts had been deleted, so the Manager and Member probes ran with an account holding those roles)
   (Member 32, Staff 38, Receptionist 31, Manager 30, Admin 8, public 3). Covers direct API access, create / read /
   update / delete, association queries, foreign record ids, filters, exports, custom plugin endpoints, statistics
   queries, related-record field trimming and the public review endpoint.

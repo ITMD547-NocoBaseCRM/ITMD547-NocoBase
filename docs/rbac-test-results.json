@@ -1,5 +1,5 @@
 {
- "ranAt": "2026-11-20T18:49:02.719Z",
+ "ranAt": "2026-11-20T19:56:24.717Z",
  "note": "manager/member probes ran with an account holding those roles (rbac_manager/rbac_member no longer exist)",
  "results": [
   {
@@ -196,6 +196,12 @@
   },
   {
    "role": "staff",
+   "name": "menu has no Dashboard",
+   "pass": true,
+   "detail": "desktopRoutes:listAccessible -> 200"
+  },
+  {
+   "role": "staff",
    "name": "lists appointments",
    "pass": true,
    "detail": "appointments:list -> 200"
@@ -244,19 +250,13 @@
   },
   {
    "role": "staff",
-   "name": "dashboard-style related paths work (customer name, booked price)",
+   "name": "dashboard-style related paths work (customer name, service name)",
    "pass": true,
    "detail": "appointments:list -> 200"
   },
   {
    "role": "staff",
    "name": "related customer record is trimmed (no email/address/consent)",
-   "pass": true,
-   "detail": "appointments:list -> 200"
-  },
-  {
-   "role": "staff",
-   "name": "related payments are trimmed",
    "pass": true,
    "detail": "appointments:list -> 200"
   },
@@ -340,21 +340,231 @@
   },
   {
    "role": "staff",
-   "name": "reads payments for own performance",
+   "name": "workspace: loads",
    "pass": true,
-   "detail": "payments:list -> 200"
+   "detail": "staffWorkspace:get -> 200"
   },
   {
    "role": "staff",
-   "name": "payments only on own appointments, no method/reference",
+   "name": "workspace: no revenue, sales, earnings or payment data",
    "pass": true,
-   "detail": "89 rows"
+   "detail": "periodDays,appointments,completed,cancelled,noShow,completionRate,shifts,shiftsCompleted,shiftsOnLeave,attendance"
   },
   {
    "role": "staff",
-   "name": "cannot export payments",
+   "name": "workspace: completed counts and attendance present",
+   "pass": true,
+   "detail": ""
+  },
+  {
+   "role": "staff",
+   "name": "workspace: own review score and count available",
+   "pass": true,
+   "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "page flag: financial widgets off",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "payments: list refused",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: get refused",
+   "pass": true,
+   "detail": "payments:get -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: aggregate refused",
+   "pass": true,
+   "detail": "payments:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: export refused",
    "pass": true,
    "detail": "payments:export -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "payments: create refused",
+   "pass": true,
+   "detail": "payments:create -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: no prices or payments in details",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: explicit price fields dropped",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: association to payments refused",
+   "pass": true,
+   "detail": "appointments/398098147442726/payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: filter by payment amount refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: filter by booked price refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: sort by booked price refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: export refused",
+   "pass": true,
+   "detail": "appointments:export -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "services: list prices visible (allowed)",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "services: related employees show no email/phone",
+   "pass": true,
+   "detail": "services:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "appointments: related employee shows no email/phone",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "service lines: no booked prices",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "service lines: filter on booked price refused",
+   "pass": true,
+   "detail": "appointmentServices:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: no spend totals or payments",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "customers: spend fields dropped",
+   "pass": true,
+   "detail": "customers:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "customers: sort by spend refused",
+   "pass": true,
+   "detail": "customers:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: filter by spend refused",
+   "pass": true,
+   "detail": "customers:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customers: association to payments refused",
+   "pass": true,
+   "detail": "customers/398097568628745/payments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "customer activity: no spend columns",
+   "pass": true,
+   "detail": "customerActivity:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: appointment → customer → activity spend dropped",
+   "pass": true,
+   "detail": "appointments:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: notes → customer → payments dropped",
+   "pass": true,
+   "detail": "customerNotes:list -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "related: filter through customer spend refused",
+   "pass": true,
+   "detail": "appointments:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: appointment counts allowed",
+   "pass": true,
+   "detail": "appointments:query -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: skill demand counts allowed",
+   "pass": true,
+   "detail": "appointmentServices:query -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: revenue sum refused",
+   "pass": true,
+   "detail": "appointmentServices:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: revenue per technician refused",
+   "pass": true,
+   "detail": "appointments:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: grouping by booked price refused",
+   "pass": true,
+   "detail": "appointmentServices:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "statistics: customer spend sum refused",
+   "pass": true,
+   "detail": "customers:query -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "writes: cannot change service prices",
+   "pass": true,
+   "detail": "services:update -> 403"
   },
   {
    "role": "staff",
@@ -853,6 +1063,54 @@
    "name": "reads review scores",
    "pass": true,
    "detail": "customerReviewAdmin:scores -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: revenue aggregate still works",
+   "pass": true,
+   "detail": "payments:query -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "admin",
+   "name": "financial: page flag on",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: revenue aggregate still works",
+   "pass": true,
+   "detail": "payments:query -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "financial: page flag on",
+   "pass": true,
+   "detail": "crmAccess:get -> 200"
+  },
+  {
+   "role": "receptionist",
+   "name": "financial: unchanged – still no payments",
+   "pass": true,
+   "detail": "payments:list -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "financial: unchanged – booked prices still visible",
+   "pass": true,
+   "detail": "appointmentServices:list -> 200"
   },
   {
    "role": "public",

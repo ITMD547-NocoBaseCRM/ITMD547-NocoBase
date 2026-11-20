@@ -102,9 +102,22 @@ async function applyStaffFinancialUi(request, { workspaceCode, check = false, lo
     const stepParams = { ...model.stepParams, jsSettings: { ...((model.stepParams || {}).jsSettings || {}), runJs: { ...(((model.stepParams || {}).jsSettings || {}).runJs || {}), version: 'v2', code } } };
     await call(`flowModels:update?filterByTk=${model.uid}`, { method: 'POST', body: { stepParams } });
   };
-  const q = (v) => encodeURIComponent(JSON.stringify(v));
-  const models = (await call(`flowModels:list?paginate=false&filter=${q({ use: 'JSBlockModel' })}`)) || [];
-  const full = async (m) => (m.stepParams ? m : call(`flowModels:findOne?uid=${m.uid}`));
+  // JS blocks of every page in the menu (flowModels can't be filtered by model type here).
+  const routes = (await call('desktopRoutes:list?paginate=false')) || [];
+  const uids = new Set();
+  const walk = (n) => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) { n.forEach(walk); return; }
+    if (n.uid && /JSBlock/.test(n.use || '')) uids.add(n.uid);
+    for (const k of Object.keys(n)) if (k !== 'stepParams') walk(n[k]);
+  };
+  for (const r of routes) {
+    if (r.type !== 'flowPage' || !r.schemaUid) continue;
+    const surface = await request(`flowSurfaces:get?pageSchemaUid=${encodeURIComponent(r.schemaUid)}`);
+    if (surface.ok) walk(surface.json && surface.json.data);
+  }
+  const models = [...uids].map((uid) => ({ uid }));
+  const full = async (m) => call(`flowModels:findOne?uid=${m.uid}`);
   let staffBlocks = 0;
   let dashboards = 0;
   for (const m0 of models) {
