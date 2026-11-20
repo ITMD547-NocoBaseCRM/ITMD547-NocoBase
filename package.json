@@ -71,7 +71,7 @@
     "test:rbac": "node --test scripts/rbac/rbac.test.js",
     "test:financial-guard": "tsx --test packages/plugins/@parlour/plugin-crm/src/server/financial-guard.test.ts",
     "test:appointment-date": "node --test scripts/appointment-date.test.js",
-    "test:customer-reviews": "node --test --test-concurrency=1 scripts/customer-reviews.test.js packages/plugins/@salon/plugin-customer-reviews/src/server/__tests__/core.test.ts"
+    "test:customer-reviews": "node --test --test-concurrency=1 scripts/customer-reviews.test.js packages/plugins/@salon/plugin-customer-reviews/src/server/__tests__/core.test.ts",
     "apply:appointment-reminders": "node scripts/apply-appointment-reminders.js",
     "apply:customer-birthday": "node scripts/apply-customer-birthday.js",
     "apply:messages-rich-editor": "node scripts/apply-messages-rich-editor.js",
