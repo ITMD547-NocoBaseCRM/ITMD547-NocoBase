@@ -1,5 +1,5 @@
 {
- "ranAt": "2026-11-20T03:37:09.035Z",
+ "ranAt": "2026-11-20T06:00:34.766Z",
  "results": [
   {
    "role": "member",
@@ -852,6 +852,84 @@
    "name": "review link endpoint reachable without login (bad token refused by the handler)",
    "pass": true,
    "detail": "customerReviewLinks:inspect -> 200"
+  },
+  {
+   "role": "member",
+   "name": "cannot read employee accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:list -> 403"
+  },
+  {
+   "role": "member",
+   "name": "cannot provision itself",
+   "pass": true,
+   "detail": "employeeOnboarding:provision -> 403"
+  },
+  {
+   "role": "member",
+   "name": "no workspace",
+   "pass": true,
+   "detail": "staffWorkspace:get -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot read employee accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:list -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "cannot self-promote",
+   "pass": true,
+   "detail": "employeeOnboarding:provision -> 403"
+  },
+  {
+   "role": "staff",
+   "name": "workspace shows only own employee",
+   "pass": true,
+   "detail": "staffWorkspace:get -> 200"
+  },
+  {
+   "role": "staff",
+   "name": "cannot change own employee link",
+   "pass": true,
+   "detail": "staff:update -> 403"
+  },
+  {
+   "role": "receptionist",
+   "name": "cannot read employee accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:list -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "reads employee account status",
+   "pass": true,
+   "detail": "employeeOnboarding:list -> 200"
+  },
+  {
+   "role": "manager",
+   "name": "cannot disable accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:disable -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot unlink accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:unlink -> 403"
+  },
+  {
+   "role": "manager",
+   "name": "cannot read onboarding tables",
+   "pass": true,
+   "detail": "employeeAccountEvents:list -> 403"
+  },
+  {
+   "role": "admin",
+   "name": "reads employee accounts",
+   "pass": true,
+   "detail": "employeeOnboarding:list -> 200"
   }
  ]
 }

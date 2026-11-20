@@ -1,7 +1,7 @@
 # BeautyWithin CRM – Role-Based Access Control
 
 NocoBase 2.2.12. Applied 2026-11-19. Audit of the previous state: [rbac-audit.md](rbac-audit.md).
-Live test results: [rbac-test-results.json](rbac-test-results.json) (142/142 passed).
+Live test results: [rbac-test-results.json](rbac-test-results.json) (155/155 passed, including the employee-onboarding checks).
 
 The five roles keep their identifiers (`admin`, `manager`, `member`, `receptionist`, `staff`; plus NocoBase's
 built-in `root`). No role, user or role assignment was deleted or renamed. NocoBase stays the only place that
@@ -113,7 +113,7 @@ them (tested). Staff technicians' appointments have a single `staffId`; booked-s
 | Admin | unchanged (all pages and settings) |
 | Manager | Beauty Within Portal: Dashboard, Customers (List, Customer Notes, Customer Reviews tabs), Staff, Appointments, Shifts, Services, Memberships, Payments, Messages (Send, History, Appointment Reminder tabs), Statistics (all tabs). The standalone Customer Notes, Message History and Reminder Settings pages stay hidden (they duplicate those tabs). No settings centre. |
 | Receptionist | Dashboard, Customers (List, Customer Notes, Customer Reviews), Appointments, Shifts, Services, Memberships (+ hidden detail pages they link to) |
-| Staff | Dashboard, Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
+| Staff | Dashboard, **My Workspace** (see employee-onboarding.md), Appointments, Shifts, Customers (List, Customer Notes), Services (Service List), Statistics → Staff Performance only |
 | Member | **Access Pending** page only (top-level). Own profile, language and sign-out stay in the avatar menu. |
 
 Typing a URL for a page that isn't granted shows 404, and its data API answers 403. Settings URLs still draw the

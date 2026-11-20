@@ -1,6 +1,7 @@
 import { Plugin } from '@nocobase/server';
 import sql from 'mssql';
 import { associationFieldGuard } from './association-field-guard';
+import { staffWorkspaceResource } from './staff-workspace';
 
 const appointmentCalendarColor = (status: string, staffId: unknown) => {
   if (status === 'cancelled') return 'cancelled';
@@ -87,6 +88,9 @@ export class PluginCrmServer extends Plugin {
   async load() {
     // RBAC: trim related records to the fields the current role may see on their own collection.
     this.app.dataSourceManager.use(associationFieldGuard(this.app), { tag: 'rbac-association-fields', after: 'acl' });
+    // "My Workspace": the signed-in technician's own appointments, shifts, customers, notes and metrics.
+    this.app.resourceManager.define(staffWorkspaceResource(this.app));
+    this.app.acl.allow('staffWorkspace', 'get', 'loggedIn');
 
     const server = process.env.AZURE_SQL_SERVER;
     const database = process.env.AZURE_SQL_DATABASE;

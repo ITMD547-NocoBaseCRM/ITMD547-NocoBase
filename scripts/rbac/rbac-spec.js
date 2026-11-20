@@ -93,7 +93,8 @@ const ROLES = {
     // Reminder Settings (= Messages → Appointment Reminder).
     menus: {
       include: [['Beauty Within Portal']],
-      exclude: [['Beauty Within Portal', 'Customer Notes'], ['Beauty Within Portal', 'Message History'], ['Beauty Within Portal', 'Reminder Settings']],
+      exclude: [['Beauty Within Portal', 'Customer Notes'], ['Beauty Within Portal', 'Message History'], ['Beauty Within Portal', 'Reminder Settings'],
+        ['Beauty Within Portal', 'My Workspace']], // technicians' page (needs a linked employee record)
     },
   },
   receptionist: {
@@ -178,6 +179,7 @@ const ROLES = {
     },
     menus: {
       include: [
+        ['Beauty Within Portal', 'My Workspace'],
         ['Beauty Within Portal', 'Dashboard'],
         ['Beauty Within Portal', 'Appointments'],
         ['Beauty Within Portal', 'Shifts'],
