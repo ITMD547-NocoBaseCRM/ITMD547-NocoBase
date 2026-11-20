@@ -64,3 +64,13 @@ test('handles rows nested inside cells (the live form layouts)', () => {
   assert.deepEqual(legacyOf(out).rows.row1, [['customer', 'D', 'S', 'E']]);
   assert.equal(splitLayout(out, ids), out, 'already split → unchanged');
 });
+
+test('legacy-only grids (the edit forms) get the row too', () => {
+  const { splitLegacy } = require('./apply-appointment-date');
+  const o = { rows: { row1: [['customer']], row4: [['S', 'E', 'services']], row5: [['notes']], row9: [['D']] }, sizes: { row1: [24], row4: [24], row5: [24], row9: [24] }, rowOrder: ['row1', 'row4', 'row5', 'row9'] };
+  const out = splitLegacy(o, ids);
+  assert.deepEqual(out.rowOrder, ['row1', 'rowWhen', 'row4', 'row5']);
+  assert.deepEqual(out.rows.rowWhen, [['D'], ['S'], ['E']]);
+  assert.deepEqual(out.rows.row4, [['services']]);
+  assert.deepEqual(splitLegacy(out, ids), out, 'idempotent');
+});

@@ -1,8 +1,8 @@
-// Splits the date from the start time on the appointment create forms.
+// Splits the date from the start time on the appointment create and edit forms.
 //
 // Usage: yarn apply:appointment-date [--check]
 //
-// Idempotent, for every appointment CreateFormModel that has a Start Time item:
+// Idempotent, for every appointment CreateFormModel and EditFormModel that has a Start Time item:
 //   1. adds a required "Date" item bound to appointments.appointmentDate (scripts/ui/appointment-date.js, a JS
 //      editable field), or refreshes its code;
 //   2. sets the Start Time item to scripts/ui/appointment-start-time.js with SEPARATE_DATE = true, so it shows only
@@ -10,7 +10,6 @@
 //   3. lays Date | Start Time | End Time out on one row, where Start Time used to be. The layout is written to every
 //      place NocoBase reads it from (props.layout, the legacy props.rows/sizes/rowOrder and
 //      stepParams.gridSettings.grid), because different grids render from different copies.
-// Edit forms are left alone: they get the same Start Time script with SEPARATE_DATE = false (combined picker).
 //
 // --check reports what would change and writes nothing. Same credentials and target rules as the other apply
 // scripts (.env: NOCOBASE_API_TOKEN or INIT_ROOT_EMAIL/INIT_ROOT_PASSWORD; NOCOBASE_API_URL).
@@ -78,6 +77,33 @@ function splitLayout(layout, { date, start, end }) {
 
 const flatItems = (cell) => (Array.isArray(cell.rows) ? cell.rows.flatMap((r) => (r.cells || []).flatMap(flatItems)) : [...(cell.items || [])]);
 
+const legacyHasSplit = (o, { date, start, end }) => JSON.stringify(o?.rows?.[ROW_ID]) === JSON.stringify([[date], [start], [end]].filter((x) => x[0]));
+
+// Same move for a grid that only has the legacy { rows: { id: [[uid...]] }, sizes, rowOrder } shape.
+function splitLegacy(o, { date, start, end }) {
+  if (legacyHasSplit(o, { date, start, end })) return { rows: o.rows, sizes: o.sizes, rowOrder: o.rowOrder || Object.keys(o.rows || {}) };
+  const moving = [date, start, end].filter(Boolean);
+  const whenSizes = moving.map(() => Math.floor(24 / moving.length));
+  const order = o.rowOrder || Object.keys(o.rows || {});
+  const rows = {};
+  const sizes = {};
+  const rowOrder = [];
+  let placed = false;
+  const place = () => { rows[ROW_ID] = moving.map((uid) => [uid]); sizes[ROW_ID] = whenSizes; placed = true; };
+  for (const id of order) {
+    if (id === ROW_ID) continue;
+    const cols = (o.rows || {})[id] || [];
+    if (!placed && cols.some((c) => c.includes(start))) { place(); rowOrder.push(ROW_ID); }
+    const keep = cols.map((c, i) => [c.filter((uid) => !moving.includes(uid)), ((o.sizes || {})[id] || [])[i]]).filter(([c]) => c.length);
+    if (!keep.length) continue;
+    rows[id] = keep.map((k) => k[0]);
+    sizes[id] = keep.length === cols.length ? keep.map((k) => k[1]) : keep.map(() => Math.floor(24 / keep.length));
+    rowOrder.push(id);
+  }
+  if (!placed) { place(); rowOrder.unshift(ROW_ID); }
+  return { rows, sizes, rowOrder };
+}
+
 // The same layout in the legacy props.rows / sizes / rowOrder shape (nested rows are flattened into their cell).
 function legacyOf(layout) {
   const rows = {};
@@ -131,7 +157,7 @@ async function main() {
   const dateCode = fs.readFileSync(DATE_SCRIPT, 'utf8');
   const startCode = startTimeCode(fs.readFileSync(START_SCRIPT, 'utf8'), true);
   const client = await createClient();
-  const forms = (await listAll(client)).filter((m) => m.use === 'CreateFormModel' && m.stepParams?.resourceSettings?.init?.collectionName === COLLECTION);
+  const forms = (await listAll(client)).filter((m) => /^(Create|Edit)FormModel$/.test(m.use) && m.stepParams?.resourceSettings?.init?.collectionName === COLLECTION);
   const results = [];
   for (const ref of forms) {
     let form = await tree(client, ref.uid);
@@ -168,20 +194,27 @@ async function main() {
     const end = itemFor(grid, END_FIELD);
     const ids = { date: date?.uid || '(new)', start: start.uid, end: end?.uid };
     const stores = [grid.props?.layout, grid.stepParams?.gridSettings?.grid?.layout].filter(Boolean);
-    const laidOut = stores.length > 0 && stores.every((l) => hasSplitRow(l, ids));
+    const legacyStores = [grid.props, grid.stepParams?.gridSettings?.grid].filter((o) => o?.rows);
+    const laidOut = stores.length + legacyStores.length > 0 && stores.every((l) => hasSplitRow(l, ids)) && (stores.length > 0 || legacyStores.every((o) => legacyHasSplit(o, ids)));
     if (!laidOut) {
       changes.push('one row: Date | Start Time | End Time');
       if (!check) {
-        const base = grid.props?.layout || grid.stepParams?.gridSettings?.grid?.layout;
-        const layout = splitLayout(base, ids);
-        const props = { ...(grid.props || {}), layout, ...legacyOf(layout) };
+        // Each store is split on its own; stores a grid doesn't use are not created.
+        const props = { ...(grid.props || {}) };
+        if (props.layout) props.layout = splitLayout(props.layout, ids);
+        if (props.rows) Object.assign(props, props.layout ? legacyOf(props.layout) : splitLegacy(props, ids));
         const stepParams = { ...(grid.stepParams || {}) };
         if (stepParams.gridSettings?.grid) {
-          const g = { ...stepParams.gridSettings.grid, layout };
-          if (g.rows) Object.assign(g, legacyOf(layout));
+          const g = { ...stepParams.gridSettings.grid };
+          if (g.layout) g.layout = splitLayout(g.layout, ids);
+          if (g.rows) Object.assign(g, g.layout ? legacyOf(g.layout) : splitLegacy(g, ids));
           stepParams.gridSettings = { ...stepParams.gridSettings, grid: g };
         }
-        const result = await client.request(`flowModels:update?filterByTk=${grid.uid}`, { method: 'POST', body: { props, stepParams } });
+        // flowModels:save replaces props (flowModels:update deep-merges them, which would keep emptied legacy rows).
+        const full = await client.request(`flowModels:findOne?uid=${grid.uid}`);
+        if (!full.ok) throw fail(`flowModels:findOne ${grid.uid}`, full);
+        const { subModels, parent, ...model } = full.json.data;
+        const result = await client.request('flowModels:save', { method: 'POST', body: { ...model, props, stepParams } });
         if (!result.ok) throw fail(`flowModels:update ${grid.uid}`, result);
       }
     }
@@ -191,7 +224,7 @@ async function main() {
   console.log(JSON.stringify({ status: 'ok', mode: check ? 'check' : 'apply', target: client.baseUrl, forms: results }, null, 2));
 }
 
-module.exports = { splitLayout, legacyOf, startTimeCode, hasSplitRow };
+module.exports = { splitLayout, splitLegacy, legacyOf, startTimeCode, hasSplitRow };
 
 if (require.main === module) {
   main().catch((error) => {
