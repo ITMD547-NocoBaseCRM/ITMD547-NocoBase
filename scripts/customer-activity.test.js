@@ -14,6 +14,72 @@ const NOW = new Date('2026-10-13T12:00:00.000Z');
 const flat = (filter) => JSON.stringify(filter);
 const readMigration = (name) => fs.readFileSync(path.join(__dirname, 'migrations', name), 'utf8');
 
+function birthdayHelpers() {
+  const source = fs.readFileSync(path.join(__dirname, 'ui', 'customers-toolbar.js'), 'utf8');
+  const helpers = source.slice(source.indexOf('const BDAY_OPTS ='), source.indexOf('// opts.skipSelect:'));
+  return vm.runInNewContext(`${helpers}\n;({ options: BDAY_OPTS, bdayFilter, packState, unpackState });`, {
+    Date, dayjs: require('dayjs'), initialState: () => ({ bday: undefined, range: null }),
+  });
+}
+
+test('birthday dropdown includes next 2 calendar months with inclusive boundaries', () => {
+  const { options, bdayFilter } = birthdayHelpers();
+  assert.equal(options.find((item) => item.value === '2months').label, 'Birthdays in next 2 months');
+  assert.equal(flat(bdayFilter('2months', new Date(2026, 9, 23))), flat({ $and: [{ birthMonthDay: { $gte: 1023 } }, { birthMonthDay: { $lte: 1223 } }] }));
+  assert.equal(flat(bdayFilter('2months', new Date(2026, 0, 31))), flat({ $and: [{ birthMonthDay: { $gte: 131 } }, { birthMonthDay: { $lte: 331 } }] }));
+});
+
+test('two-month birthday filter wraps the year and clamps February in normal and leap years', () => {
+  const { bdayFilter } = birthdayHelpers();
+  assert.equal(flat(bdayFilter('2months', new Date(2026, 11, 31))), flat({ $or: [{ birthMonthDay: { $gte: 1231 } }, { birthMonthDay: { $lte: 228 } }] }));
+  assert.equal(flat(bdayFilter('2months', new Date(2027, 11, 31))), flat({ $or: [{ birthMonthDay: { $gte: 1231 } }, { birthMonthDay: { $lte: 229 } }] }));
+});
+
+test('saved views preserve the two-month birthday setting; existing day filters are unchanged', () => {
+  const { bdayFilter, packState, unpackState } = birthdayHelpers();
+  const saved = JSON.stringify(packState({ bday: '2months', sel: { status: 'active' }, range: null }));
+  assert.equal(unpackState(saved).bday, '2months');
+  assert.equal(unpackState(saved).sel.status, 'active');
+  const now = new Date(2026, 9, 23);
+  assert.equal(flat(bdayFilter('7', now)), flat({ $and: [{ birthMonthDay: { $gte: 1023 } }, { birthMonthDay: { $lte: 1030 } }] }));
+  assert.equal(flat(bdayFilter('30', now)), flat({ $and: [{ birthMonthDay: { $gte: 1023 } }, { birthMonthDay: { $lte: 1122 } }] }));
+});
+
+test('birthday deployment changes only birthday sections and is idempotent for LF and CRLF toolbars', () => {
+  const { updatedCode } = require('./apply-customer-birthday-window');
+  const source = fs.readFileSync(path.join(__dirname, 'ui', 'customers-toolbar.js'), 'utf8');
+  const scrub = (value) => value.replace(/const BDAY_OPTS =[\s\S]*?(?=const SAVED_VIEW_COLLECTION =)/, 'OPTIONS\n')
+    .replace(/function bdayFilter\([\s\S]*?(?=\/\/ opts.skipSelect:)/, 'FILTER\n');
+  for (const newline of ['\n', '\r\n']) {
+    const existing = source.replace(/\r?\n/g, newline)
+      .replace(/.*value: '2months'.*\r?\n/, '')
+      .replace('Manage customers', 'Preserve live customization');
+    const updated = updatedCode(existing);
+    assert.ok(updated.includes('Birthdays in next 2 months'));
+    assert.equal(scrub(updated), scrub(existing));
+    assert.equal(updatedCode(updated), updated);
+  }
+});
+
+test('oversized toolbar formatting is compacted below the RunJS validation limit without changing behavior', () => {
+  const { compactForDeployment } = require('./apply-customer-birthday-window');
+  const original = '/*' + 'existing toolbar comments '.repeat(3000) + '*/\nconst birthday = { label: "Birthdays in next 2 months", value: "2months" }; birthday.value;';
+  const compact = compactForDeployment(original);
+  assert.ok(original.length > 64 * 1024);
+  assert.ok(compact.length <= 64 * 1024);
+  assert.equal(vm.runInNewContext(compact), vm.runInNewContext(original));
+  assert.equal(compactForDeployment(compact), compact);
+});
+
+test('mobile filter component is declared before the toolbar uses it without changing its body', () => {
+  const { declareMobileFilterFirst } = require('./apply-customer-birthday-window');
+  const source = 'function Toolbar() { return __MobileFilters(); }\nconst __MobileFilters = () => "Filters";\nconst CRM_MOBILE_CSS = "";\nToolbar();';
+  const updated = declareMobileFilterFirst(source);
+  assert.ok(updated.indexOf('const __MobileFilters') < updated.indexOf('function Toolbar'));
+  assert.equal(vm.runInNewContext(updated), vm.runInNewContext(source));
+  assert.equal(declareMobileFilterFirst(updated), updated);
+});
+
 test('time periods are the six rolling months and the cutoff is the same day N months earlier', () => {
   assert.deepEqual(RULES.PERIODS.map((p) => p.value), [1, 2, 3, 4, 5, 6, 12]);
   assert.deepEqual(RULES.filter({ activity: 'mostActive', months: 12, now: NOW }), { visitsLast12m: { $gte: 1 } });

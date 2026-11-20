@@ -7,8 +7,8 @@ const h = React.createElement;
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const clock = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 const dayLabel = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-const activeStatuses = new Set(['scheduled', 'confirmed', 'completed']);
-const statusColor = { scheduled: 'blue', confirmed: 'cyan', completed: 'green', cancelled: 'default', noShow: 'orange' };
+const activeStatuses = new Set(['scheduled', 'confirmed', 'inProgress', 'completed']);
+const statusColor = { scheduled: 'blue', confirmed: 'cyan', inProgress: 'purple', completed: 'green', cancelled: 'default', noShow: 'orange' };
 
 const recordsOf = (response) => {
   const value = response?.data?.data ?? response?.data ?? [];
@@ -41,29 +41,13 @@ const loadAppointments = async (filter) => {
   await resource.refresh();
   return Array.isArray(resource.getData?.()) ? resource.getData() : [];
 };
-const listRecords = async (collection, filter, fields) => {
-  const resource = ctx.makeResource('MultiRecordResource');
-  resource.setResourceName(collection);
-  resource.setPageSize(500);
-  if (filter) resource.setFilter(filter);
-  if (fields && resource.setFields) resource.setFields(fields);
-  await resource.refresh();
-  return Array.isArray(resource.getData?.()) ? resource.getData() : [];
-};
 const availableStaffFor = async (appointment) => {
   const start = new Date(appointment.startTime).toISOString();
   const endValue = appointment.endTime || new Date(new Date(start).getTime() + 60 * 60000);
   const end = new Date(endValue).toISOString();
-  const [staffRows, shiftRows, conflictRows] = await Promise.all([
-    listRecords('staff', null, ['id', 'firstName', 'lastName', 'active']),
-    listRecords('employeeShifts', { $and: [{ startTime: { $lte: start } }, { endTime: { $gte: end } }, { status: { $notIn: ['onLeave', 'cancelled'] } }] }, ['id', 'staffId']),
-    listRecords('appointments', { $and: [{ id: { $ne: appointment.id } }, { status: { $notIn: ['cancelled', 'noShow'] } }, { startTime: { $lt: end } }, { endTime: { $gt: start } }, { staffId: { $notEmpty: true } }] }, ['id', 'staffId']),
-  ]);
-  const shifted = new Set(shiftRows.map((item) => String(item.staffId)).filter(Boolean));
-  const booked = new Set(conflictRows.map((item) => String(item.staffId)).filter(Boolean));
-  return staffRows
-    .filter((item) => item.active !== false && item.active !== 'inactive' && shifted.has(String(item.id)) && !booked.has(String(item.id)))
-    .map((item) => ({ value: item.id, label: personName(item, 'Unnamed staff member') }));
+  const response = await ctx.api.request({ url: 'appointmentAvailability:availableStaff', method: 'post', data: { startTime: start, endTime: end, excludeAppointmentId: appointment.id } });
+  const payload = response?.data?.data ?? response?.data ?? {};
+  return (payload.staff || []).map((item) => ({ value: item.id, label: personName(item, 'Unnamed staff member') }));
 };
 const assignAppointment = async (appointmentId, staffId) => {
   const resource = ctx.makeResource('SingleRecordResource');
@@ -72,20 +56,22 @@ const assignAppointment = async (appointmentId, staffId) => {
   await resource.save({ staffId }, { refresh: false });
 };
 
-function Metric({ label, value, hint, tone }) {
-  return h(Card, { size: 'small', style: { height: '100%', borderRadius: 14, borderColor: tone || '#eadfd8' } },
+function Metric({ label, value, hint, tone, mobile }) {
+  return h(Card, { size: 'small', styles: mobile ? { body: { padding: 12 } } : undefined, style: { height: '100%', borderRadius: mobile ? 11 : 14, borderColor: tone || '#eadfd8' } },
     h(Typography.Text, { type: 'secondary', style: { fontSize: 12 } }, label),
-    h('div', { style: { fontSize: 28, lineHeight: 1.2, fontWeight: 700, marginTop: 6 } }, value),
-    h(Typography.Text, { type: 'secondary', style: { fontSize: 12 } }, hint));
+    h('div', { style: { fontSize: mobile ? 22 : 28, lineHeight: 1.2, fontWeight: 700, marginTop: mobile ? 3 : 6 } }, value),
+    h(Typography.Text, { type: 'secondary', style: { display: 'block', fontSize: mobile ? 10 : 12, lineHeight: 1.25, marginTop: 3 } }, hint));
 }
 
-function AppointmentCard({ item, onAssign }) {
+function AppointmentCard({ item, onAssign, mobile }) {
   const sensitivities = sensitivityLabels(item.customer);
   const services = serviceNames(item);
-  return h('div', { style: { display: 'grid', gridTemplateColumns: '72px minmax(0,1fr) auto', gap: 12, alignItems: 'start', padding: '14px 0', borderBottom: '1px solid #f0e8e3' } },
-    h('div', { style: { fontWeight: 700, color: '#6f3f2e' } }, clock.format(new Date(item.startTime))),
+  return h('div', { style: { display: 'grid', gridTemplateColumns: mobile ? '58px minmax(0,1fr)' : '72px minmax(0,1fr) auto', gap: mobile ? 9 : 12, alignItems: 'start', padding: mobile ? '12px 0' : '14px 0', borderBottom: '1px solid #f0e8e3' } },
+    h('div', { style: { fontWeight: 700, color: '#6f3f2e', fontSize: mobile ? 12 : 14 } }, clock.format(new Date(item.startTime))),
     h('div', { style: { minWidth: 0 } },
-      h('div', { style: { fontWeight: 650 } }, personName(item.customer, 'Customer')),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8 } },
+        h('span', { style: { fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, personName(item.customer, 'Customer')),
+        mobile ? h('span', { style: { flex: '0 0 auto', fontWeight: 650, fontSize: 12 } }, money.format(earning(item))) : null),
       h('div', { style: { color: '#6b7280', fontSize: 13, marginTop: 2 } }, services.join(', ') || item.category || 'Appointment'),
       item.staffId || item.staff
         ? h('div', { style: { color: '#6b7280', fontSize: 12, marginTop: 3 } }, personName(item.staff, 'Staff assigned'))
@@ -98,13 +84,15 @@ function AppointmentCard({ item, onAssign }) {
             onClick: () => onAssign(item),
             style: { height: 28, padding: '0 10px', borderRadius: 7, color: '#7a4533', borderColor: '#cda896', background: '#fff', fontWeight: 600 },
           }, '+ Assign staff')),
-      sensitivities.length ? h(Space, { size: [4, 4], wrap: true, style: { marginTop: 7 } }, sensitivities.map((label) => h(Tag, { color: 'volcano', key: label, style: { margin: 0 } }, label))) : null),
-    h('div', { style: { textAlign: 'right' } },
+      sensitivities.length ? h(Space, { size: [4, 4], wrap: true, style: { marginTop: 7 } }, sensitivities.map((label) => h(Tag, { color: 'volcano', key: label, style: { margin: 0, fontSize: mobile ? 10 : 12 } }, label))) : null,
+      mobile ? h(Tag, { color: statusColor[item.status] || 'default', style: { margin: '7px 0 0', fontSize: 10 } }, item.status || 'Unknown') : null),
+    mobile ? null : h('div', { style: { textAlign: 'right' } },
       h(Tag, { color: statusColor[item.status] || 'default', style: { margin: 0 } }, item.status || 'Unknown'),
       h('div', { style: { marginTop: 7, fontWeight: 650 } }, money.format(earning(item)))));
 }
 
 function Dashboard() {
+  const [mobile, setMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
   const [state, setState] = useState({ loading: true, rows: [], error: '' });
   const [assignment, setAssignment] = useState({ open: false, item: null, options: [], staffId: null, loading: false, saving: false, error: '' });
   const load = async () => {
@@ -119,7 +107,12 @@ function Dashboard() {
       setState({ loading: false, rows: [], error: 'Today’s dashboard could not be loaded. Please refresh and try again.' });
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const onResize = () => setMobile(window.innerWidth < 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const openAssignment = async (item) => {
     setAssignment({ open: true, item, options: [], staffId: null, loading: true, saving: false, error: '' });
@@ -149,25 +142,27 @@ function Dashboard() {
 
   const operational = state.rows.filter((item) => activeStatuses.has(item.status));
   const revenue = operational.reduce((sum, item) => sum + earning(item), 0);
+  const currentRevenue = state.rows.filter((item) => item.status === 'completed').reduce((sum, item) => sum + earning(item), 0);
   const flagged = operational.filter((item) => sensitivityLabels(item.customer).length > 0);
   const unassigned = operational.filter((item) => !item.staffId && !item.staff).length;
 
-  return h('div', { style: { width: '100%', maxWidth: 1180, margin: '0 auto', padding: '4px 2px 24px' } },
-    h('div', { style: { display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginBottom: 16 } },
+  return h('div', { style: { width: '100%', maxWidth: 1180, margin: '0 auto', padding: mobile ? '0 0 72px' : '4px 2px 24px' } },
+    h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'nowrap', marginBottom: mobile ? 12 : 16 } },
       h('div', null,
-        h(Typography.Title, { level: 2, style: { margin: 0, fontSize: 'clamp(22px, 5vw, 30px)' } }, 'Today at a glance'),
-        h(Typography.Text, { type: 'secondary' }, dayLabel.format(new Date()))),
-      h(Button, { onClick: load, loading: state.loading }, 'Refresh')),
+        h(Typography.Title, { level: 2, style: { margin: 0, fontSize: mobile ? 21 : 'clamp(22px, 5vw, 30px)' } }, mobile ? 'Today' : 'Today at a glance'),
+        h(Typography.Text, { type: 'secondary', style: { fontSize: mobile ? 12 : 14 } }, dayLabel.format(new Date()))),
+      h(Button, { size: mobile ? 'small' : 'middle', onClick: load, loading: state.loading }, 'Refresh')),
     state.error ? h(Alert, { type: 'error', showIcon: true, message: state.error, style: { marginBottom: 16 } }) : null,
-    h(Row, { gutter: [12, 12], style: { marginBottom: 16 } },
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Appointments', value: operational.length, hint: state.rows.length === operational.length ? 'scheduled today' : `${state.rows.length - operational.length} cancelled / no-show` })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Expected earnings', value: money.format(revenue), hint: 'from active bookings', tone: '#cde9d5' })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Safety flags', value: flagged.length, hint: flagged.length ? 'review before service' : 'no sensitivities flagged', tone: flagged.length ? '#ffc9bb' : '#cde9d5' })),
-      h(Col, { xs: 12, md: 6 }, h(Metric, { label: 'Unassigned', value: unassigned, hint: unassigned ? 'needs staff attention' : 'all appointments covered', tone: unassigned ? '#ffe0a3' : '#cde9d5' }))),
+    h('div', { style: { display: 'grid', gridTemplateColumns: mobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fit, minmax(145px, 1fr))', gap: mobile ? 8 : 12, marginBottom: mobile ? 12 : 16 } },
+      h(Metric, { mobile, label: 'Appointments', value: operational.length, hint: state.rows.length === operational.length ? 'scheduled today' : `${state.rows.length - operational.length} cancelled / no-show` }),
+      h(Metric, { mobile, label: 'Expected earnings', value: money.format(revenue), hint: 'active bookings', tone: '#cde9d5' }),
+      h(Metric, { mobile, label: 'Current earnings', value: money.format(currentRevenue), hint: 'completed today', tone: '#b8ddf5' }),
+      h(Metric, { mobile, label: 'Safety flags', value: flagged.length, hint: flagged.length ? 'review before service' : 'none flagged', tone: flagged.length ? '#ffc9bb' : '#cde9d5' }),
+      h('div', { style: mobile ? { gridColumn: '1 / -1' } : undefined }, h(Metric, { mobile, label: 'Unassigned', value: unassigned, hint: unassigned ? 'needs staff attention' : 'all appointments covered', tone: unassigned ? '#ffe0a3' : '#cde9d5' }))),
     state.loading ? h(Card, { style: { borderRadius: 14 } }, h(Skeleton, { active: true, paragraph: { rows: 8 } })) :
       h(Row, { gutter: [16, 16] },
-        h(Col, { xs: 24, lg: 16 }, h(Card, { title: `Today’s schedule (${operational.length})`, style: { borderRadius: 14 } },
-          operational.length ? operational.map((item) => h(AppointmentCard, { key: item.id, item, onAssign: openAssignment })) : h(Empty, { description: 'No active appointments today' }))),
+        h(Col, { xs: 24, lg: 16 }, h(Card, { title: `Today’s schedule (${operational.length})`, styles: mobile ? { body: { padding: '0 12px 8px' } } : undefined, style: { borderRadius: mobile ? 11 : 14 } },
+          operational.length ? operational.map((item) => h(AppointmentCard, { key: item.id, item, onAssign: openAssignment, mobile })) : h(Empty, { description: 'No active appointments today' }))),
         h(Col, { xs: 24, lg: 8 }, h(Card, { title: 'Client safety', style: { borderRadius: 14 } },
           flagged.length ? flagged.map((item) => h('div', { key: item.id, style: { padding: '10px 0', borderBottom: '1px solid #f0e8e3' } },
             h('div', { style: { fontWeight: 650 } }, personName(item.customer, 'Customer')),

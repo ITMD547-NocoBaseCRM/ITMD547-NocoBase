@@ -30,6 +30,30 @@
       ],
       "@parlour/plugin-crm": [
         "packages/plugins/@parlour/plugin-crm/src"
+      ],
+      "@salon/plugin-auth-clerk/client": [
+        "packages/plugins/@salon/plugin-auth-clerk/src/client"
+      ],
+      "@salon/plugin-auth-clerk/client-v2": [
+        "packages/plugins/@salon/plugin-auth-clerk/src/client-v2"
+      ],
+      "@salon/plugin-auth-clerk/package.json": [
+        "packages/plugins/@salon/plugin-auth-clerk/package.json"
+      ],
+      "@salon/plugin-auth-clerk": [
+        "packages/plugins/@salon/plugin-auth-clerk/src"
+      ],
+      "@salon/plugin-welcome-page/client": [
+        "packages/plugins/@salon/plugin-welcome-page/src/client"
+      ],
+      "@salon/plugin-welcome-page/client-v2": [
+        "packages/plugins/@salon/plugin-welcome-page/src/client-v2"
+      ],
+      "@salon/plugin-welcome-page/package.json": [
+        "packages/plugins/@salon/plugin-welcome-page/package.json"
+      ],
+      "@salon/plugin-welcome-page": [
+        "packages/plugins/@salon/plugin-welcome-page/src"
       ]
     }
   }

@@ -32,12 +32,15 @@ jobs:
             cd /opt/parlour-crm/app
             git clean -f -- Dockerfile docker-compose.ec2.yml
             git pull --ff-only origin main
-            sudo docker builder prune -af
-            sudo docker system prune -af
             sudo docker compose -f docker-compose.ec2.yml up -d --build
             test "$(sudo docker inspect -f '{{.State.Status}}' app-nocobase-1)" = "running"
             for attempt in $(seq 1 18); do
               if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:13000/ >/dev/null; then
+                # Clean up only after a healthy deploy: drop replaced images and trim the
+                # build cache down to 8GB instead of wiping it, so the yarn cache and
+                # unchanged layers survive to the next deploy.
+                sudo docker image prune -f
+                sudo docker builder prune -f --keep-storage=8GB
                 exit 0
               fi
               sleep 5

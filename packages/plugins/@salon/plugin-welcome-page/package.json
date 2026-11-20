@@ -1,0 +1,17 @@
+{
+  "name": "@salon/plugin-welcome-page",
+  "displayName": "Welcome page (Sandra's CRM)",
+  "description": "Public, branded welcome page at the application root (/). Signed-in users go straight to the CRM; everyone else sees the welcome page with a Staff Login button.",
+  "version": "0.1.0",
+  "main": "dist/server/index.js",
+  "license": "Apache-2.0",
+  "keywords": [
+    "Others"
+  ],
+  "peerDependencies": {
+    "@nocobase/client": "2.x",
+    "@nocobase/client-v2": "2.x",
+    "@nocobase/server": "2.x",
+    "@nocobase/test": "2.x"
+  }
+}

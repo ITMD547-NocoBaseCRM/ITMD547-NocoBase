@@ -128,6 +128,23 @@ async function applyToolbar(client, toolbar, check) {
   return { changed: true, bytes: code.length };
 }
 
+async function ensureAddCustomerAction(client, table, check) {
+  const existing = (table.subModels?.actions || []).find((action) => action.use === 'AddNewActionModel');
+  if (existing) return { changed: false, uid: existing.uid };
+  if (check) return { changed: true, dryRun: true };
+  const result = await client.request('flowSurfaces:addAction', {
+    method: 'POST',
+    body: {
+      target: { uid: table.uid },
+      type: 'addNew',
+      settings: { title: 'Add customer', icon: 'PlusOutlined', type: 'primary' },
+      popup: { tryTemplate: true },
+    },
+  });
+  if (!result.ok) throw fail('flowSurfaces:addAction (Add customer)', result);
+  return { changed: true, uid: result.json?.data?.uid };
+}
+
 function tableFieldPaths(table) {
   const paths = new Set();
   const walk = (node) => {
@@ -176,6 +193,7 @@ async function main() {
   const targets = findCustomersPageTargets(page);
   if (!targets || !targets.toolbar) throw new Error('The Customers page has no toolbar JS block next to the customers table; add a JS block above the table first');
   summary.toolbar = { uid: targets.toolbar.uid, ...(await applyToolbar(client, targets.toolbar, check)) };
+  summary.addCustomerAction = { table: targets.table.uid, ...(await ensureAddCustomerAction(client, targets.table, check)) };
   if (!toolbarOnly) summary.columns = { table: targets.table.uid, ...(await ensureColumns(client, targets.table, check)) };
 
   console.log(JSON.stringify(summary, null, 2));
